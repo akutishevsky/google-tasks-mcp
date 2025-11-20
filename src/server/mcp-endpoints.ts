@@ -1,111 +1,222 @@
 import { Context } from "hono";
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { SSETransport } from "../transport/mcp-transport.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
+import { HonoSSETransport, sessionManager } from "../transport/mcp-transport.js";
 import { registerAllTools } from "../tools/index.js";
 import { createLogger } from "../utils/logger.js";
-import crypto from "node:crypto";
 
 const logger = createLogger({ component: "mcp-endpoints" });
 
-const sessions = new Map<string, { server: Server; transport: SSETransport }>();
-
 export async function handleMcpGet(c: Context) {
-  const mcpToken = c.get("mcpToken");
   const sessionId = c.req.header("Mcp-Session-Id") || crypto.randomUUID();
+  const mcpAccessToken = c.get("mcpToken") as string;
 
-  logger.info("MCP GET request", { sessionId });
-
-  let session = sessions.get(sessionId);
-
-  if (!session) {
-    const server = new Server(
-      {
-        name: "google-tasks-mcp",
-        version: "1.0.0",
-      },
-      {
-        capabilities: {
-          tools: {},
-        },
-      }
-    );
-
-    const transport = new SSETransport(server, sessionId);
-
-    registerAllTools(server, mcpToken);
-
-    session = { server, transport };
-    sessions.set(sessionId, session);
-
-    logger.info("Created new MCP session", { sessionId });
+  const existingSession = sessionManager.getSession(sessionId);
+  if (existingSession) {
+    logger.info("Closing existing MCP session to establish new connection");
+    await existingSession.transport.close();
+    sessionManager.deleteSession(sessionId);
   }
 
-  c.header("Content-Type", "text/event-stream");
-  c.header("Cache-Control", "no-cache");
-  c.header("Connection", "keep-alive");
-  c.header("Mcp-Session-Id", sessionId);
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  const encoder = new TextEncoder();
 
-  const stream = new ReadableStream({
-    start(controller) {
-      session!.transport.setMessageHandler((message: string) => {
-        controller.enqueue(`data: ${message}\n\n`);
-      });
+  const writeSSE = async (data: string, event?: string) => {
+    try {
+      if (event) {
+        await writer.write(encoder.encode(`event: ${event}\n`));
+      }
+      await writer.write(encoder.encode(`data: ${data}\n\n`));
+    } catch (error) {
+      // Silently handle write errors
+    }
+  };
 
-      const keepAlive = setInterval(() => {
-        controller.enqueue(": keepalive\n\n");
-      }, 30000);
-
-      return () => {
-        clearInterval(keepAlive);
-      };
+  const transport = new HonoSSETransport();
+  transport.attachStream({
+    writeSSE: async (data: { data: string; event?: string; id?: string }) => {
+      await writeSSE(data.data, data.event);
+    },
+    close: () => {
+      writer.close();
     },
   });
 
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-      "Mcp-Session-Id": sessionId,
-    },
-  });
+  (async () => {
+    try {
+      const sessionServer = new McpServer(
+        {
+          name: "google-tasks-mcp",
+          version: "1.0.0",
+        },
+        {
+          capabilities: {
+            tools: {},
+          },
+        }
+      );
+
+      registerAllTools(sessionServer, mcpAccessToken);
+
+      try {
+        await sessionServer.connect(transport);
+
+        sessionManager.createSession(sessionId, transport);
+        logger.info("MCP session established via GET");
+
+        c.req.raw.signal.addEventListener("abort", () => {
+          logger.info("MCP connection closed by client");
+          sessionManager.deleteSession(sessionId);
+        });
+
+        const heartbeat = setInterval(async () => {
+          try {
+            await writeSSE("", "ping");
+          } catch (error) {
+            clearInterval(heartbeat);
+          }
+        }, 15000);
+
+        c.req.raw.signal.addEventListener("abort", () => {
+          clearInterval(heartbeat);
+          sessionManager.deleteSession(sessionId);
+        });
+
+      } catch (error) {
+        logger.error("Failed to connect MCP server to transport");
+        sessionManager.deleteSession(sessionId);
+        writer.close();
+      }
+    } catch (error) {
+      logger.error("Failed to initialize MCP session");
+      writer.close();
+    }
+  })();
+
+  const headers = {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+    "Mcp-Session-Id": sessionId,
+  };
+
+  return new Response(readable, { headers });
 }
 
 export async function handleMcpPost(c: Context) {
-  const sessionId = c.req.header("Mcp-Session-Id");
+  let sessionId = c.req.header("Mcp-Session-Id");
+  const mcpToken = c.get("mcpToken") as string;
 
   if (!sessionId) {
-    logger.warn("MCP POST request without session ID");
-    return c.json({ error: "Missing Mcp-Session-Id header" }, 400);
+    sessionId = crypto.randomUUID();
+    const message = await c.req.json() as JSONRPCMessage;
+
+    const { readable, writable } = new TransformStream();
+    const writer = writable.getWriter();
+    const encoder = new TextEncoder();
+
+    const writeSSE = async (data: string, event?: string) => {
+      try {
+        if (event) {
+          await writer.write(encoder.encode(`event: ${event}\n`));
+        }
+        await writer.write(encoder.encode(`data: ${data}\n\n`));
+      } catch (error) {
+        // Silently handle write errors
+      }
+    };
+
+    const transport = new HonoSSETransport();
+    transport.attachStream({
+      writeSSE: async (data: { data: string; event?: string; id?: string }) => {
+        await writeSSE(data.data, data.event);
+      },
+      close: () => {
+        writer.close();
+      },
+    });
+
+    (async () => {
+      try {
+        const sessionServer = new McpServer(
+          {
+            name: "google-tasks-mcp",
+            version: "1.0.0",
+          },
+          {
+            capabilities: {
+              tools: {},
+            },
+          }
+        );
+
+        registerAllTools(sessionServer, mcpToken);
+
+        await sessionServer.connect(transport);
+
+        sessionManager.createSession(sessionId!, transport);
+        logger.info("MCP session established via POST");
+
+        await transport.handleIncomingMessage(message);
+
+        c.req.raw.signal.addEventListener("abort", () => {
+          logger.info("MCP connection closed by client");
+          sessionManager.deleteSession(sessionId!);
+        });
+
+        const heartbeat = setInterval(async () => {
+          try {
+            await writeSSE("", "ping");
+          } catch (error) {
+            clearInterval(heartbeat);
+          }
+        }, 15000);
+
+        c.req.raw.signal.addEventListener("abort", () => {
+          clearInterval(heartbeat);
+          sessionManager.deleteSession(sessionId!);
+        });
+
+      } catch (error) {
+        logger.error("Failed to initialize MCP session via POST");
+        sessionManager.deleteSession(sessionId!);
+        writer.close();
+      }
+    })();
+
+    const headers = {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+      "X-Accel-Buffering": "no",
+      "Mcp-Session-Id": sessionId,
+    };
+
+    return new Response(readable, { headers });
   }
 
-  const session = sessions.get(sessionId);
-
+  const session = sessionManager.getSession(sessionId);
   if (!session) {
-    logger.warn("MCP POST request with invalid session ID", { sessionId });
-    return c.json({ error: "Invalid session" }, 404);
+    logger.warn("Message received for invalid or expired session");
+    return c.json({
+      error: "invalid_session",
+      error_description: "Session not found or expired"
+    }, 404);
   }
 
   try {
-    const message = await c.req.text();
-    logger.debug("Received MCP message", { sessionId });
+    const message = await c.req.json() as JSONRPCMessage;
 
-    const jsonMessage = JSON.parse(message);
+    await session.transport.handleIncomingMessage(message);
 
-    const response = await session.server.handleRequest(jsonMessage);
-
-    return c.json(response);
+    return c.body(null, 202);
   } catch (error) {
-    logger.error("Error handling MCP request", {
-      sessionId,
-      error: String(error),
-    });
-    return c.json(
-      {
-        error: "internal_server_error",
-        error_description: "Failed to process MCP request",
-      },
-      500
-    );
+    logger.error("Failed to process incoming MCP message");
+    return c.json({
+      error: "internal_error",
+      error_description: "Failed to process message"
+    }, 500);
   }
 }

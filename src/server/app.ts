@@ -102,6 +102,16 @@ export function createApp(config: ServerConfig) {
     }
   });
 
+  app.get("/privacy-policy", async (c) => {
+    try {
+      const html = await readFile("./public/privacy-policy.html", "utf-8");
+      c.header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'");
+      return c.html(html);
+    } catch {
+      return c.notFound();
+    }
+  });
+
   app.get("/health", async (c) => {
     try {
       const html = await readFile("./public/health.html", "utf-8");

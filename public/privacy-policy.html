@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy - Google Tasks MCP Server</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: white;
+            min-height: 100vh;
+        }
+        h1 {
+            color: #1a73e8;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+        .last-updated {
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 30px;
+            font-style: italic;
+        }
+        h2 {
+            color: #1a73e8;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            font-size: 1.8em;
+        }
+        h3 {
+            color: #333;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            font-size: 1.3em;
+        }
+        p {
+            margin-bottom: 15px;
+        }
+        ul {
+            margin-left: 30px;
+            margin-bottom: 15px;
+        }
+        li {
+            margin-bottom: 8px;
+        }
+        .highlight {
+            background: #e8f0fe;
+            padding: 15px;
+            border-left: 4px solid #1a73e8;
+            margin: 20px 0;
+        }
+        code {
+            background: #f5f5f5;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        a {
+            color: #1a73e8;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            color: #666;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Privacy Policy</h1>
+        <p class="last-updated">Last Updated: November 20, 2025</p>
+
+        <div class="highlight">
+            <strong>TL;DR:</strong> This MCP server is designed with privacy as a core principle. We encrypt all tokens, redact sensitive information from logs, and store only what's necessary to provide the service. You maintain full control over your data through your Google account.
+        </div>
+
+        <h2>Introduction</h2>
+        <p>
+            This Privacy Policy explains how the Google Tasks MCP Server ("the Service", "we", "our") collects, uses, and protects your information when you use our Model Context Protocol server to access your Google Tasks data.
+        </p>
+
+        <h2>Information We Collect</h2>
+
+        <h3>Authentication Tokens</h3>
+        <ul>
+            <li><strong>Google OAuth Tokens:</strong> Access and refresh tokens from Google OAuth 2.0 authentication</li>
+            <li><strong>MCP Session Tokens:</strong> Temporary session identifiers for MCP client connections</li>
+            <li><strong>Storage Duration:</strong> 30 days (automatically purged after expiration)</li>
+        </ul>
+
+        <h3>What We Do NOT Collect</h3>
+        <ul>
+            <li>Personal information (name, email, phone number)</li>
+            <li>Google Tasks content or metadata beyond what's requested through MCP tools</li>
+            <li>IP addresses or tracking cookies</li>
+            <li>Usage analytics or telemetry data</li>
+        </ul>
+
+        <h2>How We Use Your Information</h2>
+
+        <h3>Authentication & Authorization</h3>
+        <p>
+            OAuth tokens are used exclusively to authenticate your requests to the Google Tasks API on your behalf. We act as a secure proxy between your MCP client and Google's services.
+        </p>
+
+        <h3>Session Management</h3>
+        <p>
+            MCP session tokens maintain the connection between your client (e.g., Claude Desktop) and our server, enabling real-time communication for task management operations.
+        </p>
+
+        <h2>Data Security</h2>
+
+        <h3>Encryption at Rest</h3>
+        <ul>
+            <li><strong>Algorithm:</strong> AES-256-GCM (authenticated encryption)</li>
+            <li><strong>Key Derivation:</strong> PBKDF2 with 100,000 iterations</li>
+            <li><strong>What's Encrypted:</strong> All Google OAuth access and refresh tokens</li>
+        </ul>
+
+        <h3>Encryption in Transit</h3>
+        <ul>
+            <li>All communications use HTTPS/TLS 1.2+</li>
+            <li>Strict Transport Security (HSTS) enabled</li>
+            <li>Modern cipher suites only</li>
+        </ul>
+
+        <h3>Privacy-Safe Logging</h3>
+        <p>
+            Our logging system automatically redacts:
+        </p>
+        <ul>
+            <li>Access and refresh tokens</li>
+            <li>Authorization codes</li>
+            <li>User identifiers</li>
+            <li>Client secrets</li>
+            <li>Any personal information</li>
+        </ul>
+        <p>
+            You can verify this implementation in our <a href="https://github.com/akutishevsky/google-tasks-mcp" target="_blank">open-source code</a> at <code>src/utils/logger.ts</code>.
+        </p>
+
+        <h2>Data Sharing & Third Parties</h2>
+        <p>
+            We do not share, sell, rent, or trade your data with any third parties. Your OAuth tokens are used solely to communicate with Google's APIs on your behalf.
+        </p>
+
+        <h3>Google API Services</h3>
+        <p>
+            This service interacts with Google Tasks API. Your use of Google services is subject to <a href="https://policies.google.com/privacy" target="_blank">Google's Privacy Policy</a>.
+        </p>
+
+        <h2>Data Retention</h2>
+        <ul>
+            <li><strong>OAuth Tokens:</strong> 30 days (automatic expiration via Deno KV TTL)</li>
+            <li><strong>MCP Sessions:</strong> 30 minutes of inactivity (automatic cleanup)</li>
+            <li><strong>Logs:</strong> Operational logs are retained for debugging purposes but contain no personal information</li>
+        </ul>
+
+        <h2>Your Rights & Control</h2>
+
+        <h3>Revoke Access</h3>
+        <p>
+            You can revoke this service's access to your Google account at any time:
+        </p>
+        <ol>
+            <li>Visit <a href="https://myaccount.google.com/permissions" target="_blank">Google Account Permissions</a></li>
+            <li>Find "Google Tasks MCP Server" in the list</li>
+            <li>Click "Remove Access"</li>
+        </ol>
+
+        <h3>Delete Your Data</h3>
+        <p>
+            To delete all data associated with your account:
+        </p>
+        <ul>
+            <li>Revoke access as described above (automatically purges tokens within 30 days)</li>
+            <li>For immediate deletion, contact us at the repository issues page</li>
+        </ul>
+
+        <h2>Open Source Transparency</h2>
+        <p>
+            This service is <strong>fully open source</strong>. You can review the complete source code, including:
+        </p>
+        <ul>
+            <li>Token encryption implementation</li>
+            <li>Logging and redaction logic</li>
+            <li>Data storage mechanisms</li>
+            <li>API request handling</li>
+        </ul>
+        <p>
+            Repository: <a href="https://github.com/akutishevsky/google-tasks-mcp" target="_blank">github.com/akutishevsky/google-tasks-mcp</a>
+        </p>
+
+        <h2>Cookies & Tracking</h2>
+        <p>
+            This service does not use cookies, tracking pixels, or any form of user tracking. Session management is handled through HTTP headers and OAuth tokens.
+        </p>
+
+        <h2>Children's Privacy</h2>
+        <p>
+            This service is not directed at children under 13. We do not knowingly collect personal information from children.
+        </p>
+
+        <h2>Changes to This Policy</h2>
+        <p>
+            We may update this Privacy Policy from time to time. Changes will be posted on this page with an updated "Last Updated" date. Continued use of the service after changes constitutes acceptance of the updated policy.
+        </p>
+
+        <h2>Data Breach Notification</h2>
+        <p>
+            In the unlikely event of a data breach affecting encrypted tokens, we will:
+        </p>
+        <ul>
+            <li>Notify affected users via GitHub repository announcement</li>
+            <li>Provide details about the nature and scope of the breach</li>
+            <li>Recommend immediate token revocation through Google Account settings</li>
+        </ul>
+
+        <h2>Self-Hosting</h2>
+        <p>
+            For maximum privacy and control, you can self-host this service. When self-hosting:
+        </p>
+        <ul>
+            <li>You control all data storage and encryption keys</li>
+            <li>No data is sent to any third-party servers (except Google APIs)</li>
+            <li>You can audit all code and operations</li>
+        </ul>
+        <p>
+            See the <a href="https://github.com/akutishevsky/google-tasks-mcp#readme" target="_blank">README</a> for self-hosting instructions.
+        </p>
+
+        <h2>Contact Information</h2>
+        <p>
+            For privacy concerns, questions, or data deletion requests:
+        </p>
+        <ul>
+            <li><strong>GitHub Issues:</strong> <a href="https://github.com/akutishevsky/google-tasks-mcp/issues" target="_blank">github.com/akutishevsky/google-tasks-mcp/issues</a></li>
+            <li><strong>Repository:</strong> <a href="https://github.com/akutishevsky/google-tasks-mcp" target="_blank">github.com/akutishevsky/google-tasks-mcp</a></li>
+        </ul>
+
+        <h2>Disclaimer</h2>
+        <p>
+            This service is provided "as-is" without warranties of any kind. While we implement industry-standard security practices, no system is 100% secure. Users are encouraged to review the source code and self-host if maximum security is required.
+        </p>
+
+        <div class="footer">
+            <p>
+                <strong>Google Tasks MCP Server</strong><br>
+                Open Source Project by akutishevsky<br>
+                Licensed under MIT License
+            </p>
+            <p style="margin-top: 15px;">
+                This service is not affiliated with, endorsed by, or sponsored by Google LLC or Anthropic PBC.
+            </p>
+        </div>
+    </div>
+</body>
+</html>

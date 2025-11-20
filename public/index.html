@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Tasks MCP Server</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 60px 40px;
+            text-align: center;
+        }
+        .logo {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+        .tagline {
+            color: #666;
+            font-size: 1.2em;
+            margin-bottom: 40px;
+        }
+        .description {
+            color: #555;
+            margin-bottom: 40px;
+            text-align: left;
+            line-height: 1.8;
+        }
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+            text-align: left;
+        }
+        .feature {
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        .feature-icon {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        .feature h3 {
+            color: #667eea;
+            margin-bottom: 8px;
+            font-size: 1.1em;
+        }
+        .feature p {
+            color: #666;
+            font-size: 0.9em;
+        }
+        .buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 30px;
+        }
+        .btn {
+            display: inline-block;
+            padding: 14px 32px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            font-size: 1em;
+        }
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+        .btn-secondary {
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
+        }
+        .btn-secondary:hover {
+            background: #f8f9fa;
+            transform: translateY(-2px);
+        }
+        .status {
+            display: inline-block;
+            padding: 8px 16px;
+            background: #10b981;
+            color: white;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 600;
+            margin-bottom: 30px;
+        }
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+            color: #666;
+            font-size: 0.9em;
+        }
+        .footer a {
+            color: #667eea;
+            text-decoration: none;
+        }
+        .footer a:hover {
+            text-decoration: underline;
+        }
+        code {
+            background: #f8f9fa;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            color: #667eea;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">✓</div>
+        <h1>Google Tasks MCP Server</h1>
+        <p class="tagline">AI-Powered Task Management via Model Context Protocol</p>
+
+        <div class="status">🟢 Service Online</div>
+
+        <div class="description">
+            <p>
+                An open-source MCP server that enables AI assistants like Claude to seamlessly manage your Google Tasks through natural language.
+                Create, update, organize, and complete tasks without leaving your conversation.
+            </p>
+        </div>
+
+        <div class="features">
+            <div class="feature">
+                <div class="feature-icon">🤖</div>
+                <h3>AI Integration</h3>
+                <p>Connect with Claude Desktop or any MCP-compatible client</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">🔒</div>
+                <h3>Secure & Private</h3>
+                <p>AES-256 encryption, privacy-safe logging, open source</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">⚡</div>
+                <h3>Full API Coverage</h3>
+                <p>14 tools covering all Google Tasks API operations</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">🌐</div>
+                <h3>OAuth 2.0</h3>
+                <p>Secure authentication with Google's official OAuth flow</p>
+            </div>
+        </div>
+
+        <div class="buttons">
+            <a href="https://github.com/akutishevsky/google-tasks-mcp" class="btn btn-primary" target="_blank">
+                View on GitHub
+            </a>
+            <a href="/privacy-policy" class="btn btn-secondary">
+                Privacy Policy
+            </a>
+        </div>
+
+        <div class="footer">
+            <p>
+                <strong>Available Tools:</strong> list_task_lists, get_task_list, insert_task_list, update_task_list, patch_task_list, delete_task_list,
+                list_tasks, get_task, insert_task, update_task, patch_task, delete_task, clear_completed_tasks, move_task
+            </p>
+            <p style="margin-top: 15px;">
+                Built with ❤️ using <a href="https://modelcontextprotocol.io" target="_blank">Model Context Protocol</a> ·
+                Licensed under <a href="https://opensource.org/licenses/MIT" target="_blank">MIT</a>
+            </p>
+            <p style="margin-top: 10px; font-size: 0.85em;">
+                Not affiliated with Google LLC or Anthropic PBC
+            </p>
+        </div>
+    </div>
+</body>
+</html>

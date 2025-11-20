@@ -18,7 +18,7 @@ export function registerTasksTools(server: any, mcpAccessToken: string) {
   server.registerTool(
     "list_tasks",
     {
-      description: "Returns all tasks in the specified task list.",
+      description: "Returns all tasks in the specified task list. IMPORTANT: Google Tasks API does not expose future instances of recurring tasks. When filtering by due date, only the current instance of recurring tasks will be shown, not future occurrences.",
       inputSchema: {
         taskListId: z.string().describe("Task list identifier."),
         completedMax: z
@@ -66,15 +66,23 @@ export function registerTasksTools(server: any, mcpAccessToken: string) {
     async (args: any) => {
       logger.info("Tool invoked: list_tasks");
       try {
-        const { taskListId, ...options } = args;
-        const result = await listTasks(mcpAccessToken, taskListId, options);
+        const { taskListId, dueMin, dueMax, ...options } = args;
+        const result = await listTasks(mcpAccessToken, taskListId, { dueMin, dueMax, ...options });
         const processedData = addReadableTimestamps(result);
+
+        let responseText = JSON.stringify(processedData, null, 2);
+
+        // Add warning if date filters are used
+        if (dueMin || dueMax) {
+          const warning = "\n\n⚠️ NOTE: Google Tasks API does not support recurring tasks. This query only returns the CURRENT instance of any recurring tasks. Future occurrences of recurring tasks will not appear in these results, even if they fall within the specified date range. To see all incomplete tasks (including recurring ones with their current due dates), query without date filters.";
+          responseText = responseText + warning;
+        }
 
         return {
           content: [
             {
               type: "text",
-              text: JSON.stringify(processedData, null, 2),
+              text: responseText,
             },
           ],
         };

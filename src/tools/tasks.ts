@@ -18,7 +18,7 @@ export function registerTasksTools(server: any, mcpAccessToken: string) {
   server.registerTool(
     "list_tasks",
     {
-      description: "Returns all tasks in the specified task list. IMPORTANT: Google Tasks API does not expose future instances of recurring tasks. When filtering by due date, only the current instance of recurring tasks will be shown, not future occurrences.",
+      description: "Returns all tasks in the specified task list. IMPORTANT: To see completed tasks from the web UI or mobile apps, you MUST set both showCompleted=true AND showHidden=true. Google Tasks API does not expose future instances of recurring tasks. When filtering by due date, only the current instance of recurring tasks will be shown, not future occurrences.",
       inputSchema: {
         taskListId: z.string().describe("Task list identifier."),
         completedMax: z
@@ -56,7 +56,7 @@ export function registerTasksTools(server: any, mcpAccessToken: string) {
         showHidden: z
           .boolean()
           .optional()
-          .describe("Flag indicating whether hidden tasks are returned in the result. Default is false."),
+          .describe("Flag indicating whether hidden tasks are returned in the result. IMPORTANT: Must be true to show tasks completed in the web UI or mobile apps. Default is false."),
         updatedMin: z
           .string()
           .optional()
@@ -66,16 +66,25 @@ export function registerTasksTools(server: any, mcpAccessToken: string) {
     async (args: any) => {
       logger.info("Tool invoked: list_tasks");
       try {
-        const { taskListId, dueMin, dueMax, ...options } = args;
-        const result = await listTasks(mcpAccessToken, taskListId, { dueMin, dueMax, ...options });
+        const { taskListId, dueMin, dueMax, showCompleted, showHidden, ...options } = args;
+        const result = await listTasks(mcpAccessToken, taskListId, { dueMin, dueMax, showCompleted, showHidden, ...options });
         const processedData = addReadableTimestamps(result);
 
         let responseText = JSON.stringify(processedData, null, 2);
+        const warnings: string[] = [];
 
         // Add warning if date filters are used
         if (dueMin || dueMax) {
-          const warning = "\n\n⚠️ NOTE: Google Tasks API does not support recurring tasks. This query only returns the CURRENT instance of any recurring tasks. Future occurrences of recurring tasks will not appear in these results, even if they fall within the specified date range. To see all incomplete tasks (including recurring ones with their current due dates), query without date filters.";
-          responseText = responseText + warning;
+          warnings.push("⚠️ RECURRING TASKS: Google Tasks API does not support recurring tasks. This query only returns the CURRENT instance of any recurring tasks. Future occurrences of recurring tasks will not appear in these results, even if they fall within the specified date range.");
+        }
+
+        // Add warning if showCompleted is true but showHidden is not
+        if (showCompleted === true && showHidden !== true) {
+          warnings.push("⚠️ COMPLETED TASKS: You set showCompleted=true but showHidden is not true. Tasks completed in the web UI or mobile apps will NOT be visible. To see all completed tasks, you must set BOTH showCompleted=true AND showHidden=true.");
+        }
+
+        if (warnings.length > 0) {
+          responseText = responseText + "\n\n" + warnings.join("\n\n");
         }
 
         return {

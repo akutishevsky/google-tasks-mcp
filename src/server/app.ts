@@ -60,7 +60,7 @@ export function createApp(config: ServerConfig) {
   app.get("/", async (c) => {
     try {
       const html = await readFile("./public/index.html", "utf-8");
-      c.header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'");
+      c.header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline' https://www.googletagmanager.com; connect-src https://www.google-analytics.com; frame-ancestors 'none'");
       return c.html(html);
     } catch {
       return c.json({ message: "Google Tasks MCP Server" });
@@ -105,7 +105,7 @@ export function createApp(config: ServerConfig) {
   app.get("/privacy-policy", async (c) => {
     try {
       const html = await readFile("./public/privacy-policy.html", "utf-8");
-      c.header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'");
+      c.header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline' https://www.googletagmanager.com; connect-src https://www.google-analytics.com; frame-ancestors 'none'");
       return c.html(html);
     } catch {
       return c.notFound();

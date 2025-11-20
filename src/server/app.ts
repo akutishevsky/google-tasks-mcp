@@ -93,6 +93,15 @@ export function createApp(config: ServerConfig) {
     });
   });
 
+  app.get("/favicon.ico", async (c) => {
+    try {
+      const file = await readFile("./public/favicon.ico");
+      return c.body(file, 200, { "Content-Type": "image/x-icon" });
+    } catch {
+      return c.notFound();
+    }
+  });
+
   app.get("/health", async (c) => {
     try {
       const html = await readFile("./public/health.html", "utf-8");

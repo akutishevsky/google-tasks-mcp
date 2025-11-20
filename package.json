@@ -1,0 +1,40 @@
+{
+  "name": "google-tasks-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for Google Tasks API integration",
+  "type": "module",
+  "main": "build/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "generate-secret": "node -e \"console.log('ENCRYPTION_SECRET=' + require('crypto').randomBytes(32).toString('hex'))\""
+  },
+  "keywords": [
+    "mcp",
+    "google-tasks",
+    "productivity",
+    "tasks"
+  ],
+  "author": "akutishevsky",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/akutishevsky/google-tasks-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/akutishevsky/google-tasks-mcp/issues"
+  },
+  "homepage": "https://github.com/akutishevsky/google-tasks-mcp#readme",
+  "dependencies": {
+    "@deno/kv": "^0.8.4",
+    "@hono/node-server": "^1.13.7",
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "hono": "^4.10.5",
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.24.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}

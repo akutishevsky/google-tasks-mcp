@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   listTaskLists,
   getTaskList,
@@ -18,20 +19,18 @@ export function registerTaskListsTools(server: any, mcpAccessToken: string) {
       description:
         "Returns all the authenticated user's task lists. A user can have up to 2000 lists at a time.",
       inputSchema: {
-        type: "object",
-        properties: {
-          maxResults: {
-            type: "number",
-            description: "Maximum number of task lists returned on one page. Default is 1000 (max allowed: 1000).",
-          },
-          pageToken: {
-            type: "string",
-            description: "Token specifying the result page to return.",
-          },
-        },
+        maxResults: z
+          .number()
+          .optional()
+          .describe("Maximum number of task lists returned on one page. Default is 1000 (max allowed: 1000)."),
+        pageToken: z
+          .string()
+          .optional()
+          .describe("Token specifying the result page to return."),
       },
     },
-    async ({ maxResults, pageToken }: { maxResults?: number; pageToken?: string }) => {
+    async (args: any) => {
+      const { maxResults, pageToken } = args;
       logger.info("Tool invoked: list_task_lists");
       try {
         const result = await listTaskLists(mcpAccessToken, maxResults, pageToken);
@@ -65,17 +64,11 @@ export function registerTaskListsTools(server: any, mcpAccessToken: string) {
     {
       description: "Returns the authenticated user's specified task list.",
       inputSchema: {
-        type: "object",
-        properties: {
-          taskListId: {
-            type: "string",
-            description: "Task list identifier.",
-          },
-        },
-        required: ["taskListId"],
+        taskListId: z.string().describe("Task list identifier."),
       },
     },
-    async ({ taskListId }: { taskListId: string }) => {
+    async (args: any) => {
+      const { taskListId } = args;
       logger.info("Tool invoked: get_task_list");
       try {
         const result = await getTaskList(mcpAccessToken, taskListId);
@@ -109,17 +102,11 @@ export function registerTaskListsTools(server: any, mcpAccessToken: string) {
     {
       description: "Creates a new task list and adds it to the authenticated user's task lists.",
       inputSchema: {
-        type: "object",
-        properties: {
-          title: {
-            type: "string",
-            description: "Title of the task list.",
-          },
-        },
-        required: ["title"],
+        title: z.string().describe("Title of the task list."),
       },
     },
-    async ({ title }: { title: string }) => {
+    async (args: any) => {
+      const { title } = args;
       logger.info("Tool invoked: insert_task_list");
       try {
         const result = await insertTaskList(mcpAccessToken, title);
@@ -153,21 +140,12 @@ export function registerTaskListsTools(server: any, mcpAccessToken: string) {
     {
       description: "Updates the authenticated user's specified task list. This method supports full update.",
       inputSchema: {
-        type: "object",
-        properties: {
-          taskListId: {
-            type: "string",
-            description: "Task list identifier.",
-          },
-          title: {
-            type: "string",
-            description: "Title of the task list.",
-          },
-        },
-        required: ["taskListId", "title"],
+        taskListId: z.string().describe("Task list identifier."),
+        title: z.string().describe("Title of the task list."),
       },
     },
-    async ({ taskListId, title }: { taskListId: string; title: string }) => {
+    async (args: any) => {
+      const { taskListId, title } = args;
       logger.info("Tool invoked: update_task_list");
       try {
         const result = await updateTaskList(mcpAccessToken, taskListId, title);
@@ -201,21 +179,12 @@ export function registerTaskListsTools(server: any, mcpAccessToken: string) {
     {
       description: "Updates the authenticated user's specified task list. This method supports patch semantics.",
       inputSchema: {
-        type: "object",
-        properties: {
-          taskListId: {
-            type: "string",
-            description: "Task list identifier.",
-          },
-          title: {
-            type: "string",
-            description: "Title of the task list.",
-          },
-        },
-        required: ["taskListId", "title"],
+        taskListId: z.string().describe("Task list identifier."),
+        title: z.string().describe("Title of the task list."),
       },
     },
-    async ({ taskListId, title }: { taskListId: string; title: string }) => {
+    async (args: any) => {
+      const { taskListId, title } = args;
       logger.info("Tool invoked: patch_task_list");
       try {
         const result = await patchTaskList(mcpAccessToken, taskListId, { title });
@@ -249,17 +218,11 @@ export function registerTaskListsTools(server: any, mcpAccessToken: string) {
     {
       description: "Deletes the authenticated user's specified task list.",
       inputSchema: {
-        type: "object",
-        properties: {
-          taskListId: {
-            type: "string",
-            description: "Task list identifier.",
-          },
-        },
-        required: ["taskListId"],
+        taskListId: z.string().describe("Task list identifier."),
       },
     },
-    async ({ taskListId }: { taskListId: string }) => {
+    async (args: any) => {
+      const { taskListId } = args;
       logger.info("Tool invoked: delete_task_list");
       try {
         await deleteTaskList(mcpAccessToken, taskListId);

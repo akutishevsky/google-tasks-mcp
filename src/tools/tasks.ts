@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   listTasks,
   getTask,
@@ -19,60 +20,53 @@ export function registerTasksTools(server: any, mcpAccessToken: string) {
     {
       description: "Returns all tasks in the specified task list.",
       inputSchema: {
-        type: "object",
-        properties: {
-          taskListId: {
-            type: "string",
-            description: "Task list identifier.",
-          },
-          completedMax: {
-            type: "string",
-            description: "Upper bound for a task's completion date (RFC 3339 timestamp) to filter by.",
-          },
-          completedMin: {
-            type: "string",
-            description: "Lower bound for a task's completion date (RFC 3339 timestamp) to filter by.",
-          },
-          dueMax: {
-            type: "string",
-            description: "Upper bound for a task's due date (RFC 3339 timestamp) to filter by.",
-          },
-          dueMin: {
-            type: "string",
-            description: "Lower bound for a task's due date (RFC 3339 timestamp) to filter by.",
-          },
-          maxResults: {
-            type: "number",
-            description: "Maximum number of tasks returned on one page.",
-          },
-          pageToken: {
-            type: "string",
-            description: "Token specifying the result page to return.",
-          },
-          showCompleted: {
-            type: "boolean",
-            description: "Flag indicating whether completed tasks are returned in the result. Default is true.",
-          },
-          showDeleted: {
-            type: "boolean",
-            description: "Flag indicating whether deleted tasks are returned in the result. Default is false.",
-          },
-          showHidden: {
-            type: "boolean",
-            description: "Flag indicating whether hidden tasks are returned in the result. Default is false.",
-          },
-          updatedMin: {
-            type: "string",
-            description: "Lower bound for a task's last modification time (RFC 3339 timestamp) to filter by.",
-          },
-        },
-        required: ["taskListId"],
+        taskListId: z.string().describe("Task list identifier."),
+        completedMax: z
+          .string()
+          .optional()
+          .describe("Upper bound for a task's completion date (RFC 3339 timestamp) to filter by."),
+        completedMin: z
+          .string()
+          .optional()
+          .describe("Lower bound for a task's completion date (RFC 3339 timestamp) to filter by."),
+        dueMax: z
+          .string()
+          .optional()
+          .describe("Upper bound for a task's due date (RFC 3339 timestamp) to filter by."),
+        dueMin: z
+          .string()
+          .optional()
+          .describe("Lower bound for a task's due date (RFC 3339 timestamp) to filter by."),
+        maxResults: z
+          .number()
+          .optional()
+          .describe("Maximum number of tasks returned on one page."),
+        pageToken: z
+          .string()
+          .optional()
+          .describe("Token specifying the result page to return."),
+        showCompleted: z
+          .boolean()
+          .optional()
+          .describe("Flag indicating whether completed tasks are returned in the result. Default is true."),
+        showDeleted: z
+          .boolean()
+          .optional()
+          .describe("Flag indicating whether deleted tasks are returned in the result. Default is false."),
+        showHidden: z
+          .boolean()
+          .optional()
+          .describe("Flag indicating whether hidden tasks are returned in the result. Default is false."),
+        updatedMin: z
+          .string()
+          .optional()
+          .describe("Lower bound for a task's last modification time (RFC 3339 timestamp) to filter by."),
       },
     },
-    async (params: any) => {
+    async (args: any) => {
       logger.info("Tool invoked: list_tasks");
       try {
-        const { taskListId, ...options } = params;
+        const { taskListId, ...options } = args;
         const result = await listTasks(mcpAccessToken, taskListId, options);
         const processedData = addReadableTimestamps(result);
 
@@ -104,21 +98,12 @@ export function registerTasksTools(server: any, mcpAccessToken: string) {
     {
       description: "Returns the specified task.",
       inputSchema: {
-        type: "object",
-        properties: {
-          taskListId: {
-            type: "string",
-            description: "Task list identifier.",
-          },
-          taskId: {
-            type: "string",
-            description: "Task identifier.",
-          },
-        },
-        required: ["taskListId", "taskId"],
+        taskListId: z.string().describe("Task list identifier."),
+        taskId: z.string().describe("Task identifier."),
       },
     },
-    async ({ taskListId, taskId }: { taskListId: string; taskId: string }) => {
+    async (args: any) => {
+      const { taskListId, taskId } = args;
       logger.info("Tool invoked: get_task");
       try {
         const result = await getTask(mcpAccessToken, taskListId, taskId);
@@ -152,40 +137,27 @@ export function registerTasksTools(server: any, mcpAccessToken: string) {
     {
       description: "Creates a new task on the specified task list.",
       inputSchema: {
-        type: "object",
-        properties: {
-          taskListId: {
-            type: "string",
-            description: "Task list identifier.",
-          },
-          title: {
-            type: "string",
-            description: "Title of the task.",
-          },
-          notes: {
-            type: "string",
-            description: "Notes describing the task.",
-          },
-          due: {
-            type: "string",
-            description: "Due date of the task (RFC 3339 timestamp, e.g., '2025-01-15T00:00:00.000Z').",
-          },
-          parent: {
-            type: "string",
-            description: "Parent task identifier. If specified, the task is created as a subtask.",
-          },
-          previous: {
-            type: "string",
-            description: "Previous sibling task identifier. If specified, the task is created at the position after this sibling.",
-          },
-        },
-        required: ["taskListId", "title"],
+        taskListId: z.string().describe("Task list identifier."),
+        title: z.string().describe("Title of the task."),
+        notes: z.string().optional().describe("Notes describing the task."),
+        due: z
+          .string()
+          .optional()
+          .describe("Due date of the task (RFC 3339 timestamp, e.g., '2025-01-15T00:00:00.000Z')."),
+        parent: z
+          .string()
+          .optional()
+          .describe("Parent task identifier. If specified, the task is created as a subtask."),
+        previous: z
+          .string()
+          .optional()
+          .describe("Previous sibling task identifier. If specified, the task is created at the position after this sibling."),
       },
     },
-    async (params: any) => {
+    async (args: any) => {
       logger.info("Tool invoked: insert_task");
       try {
-        const { taskListId, parent, previous, ...task } = params;
+        const { taskListId, parent, previous, ...task } = args;
         const result = await insertTask(mcpAccessToken, taskListId, task, parent, previous);
         const processedData = addReadableTimestamps(result);
 
@@ -217,45 +189,28 @@ export function registerTasksTools(server: any, mcpAccessToken: string) {
     {
       description: "Updates the specified task. This method supports full update.",
       inputSchema: {
-        type: "object",
-        properties: {
-          taskListId: {
-            type: "string",
-            description: "Task list identifier.",
-          },
-          taskId: {
-            type: "string",
-            description: "Task identifier.",
-          },
-          title: {
-            type: "string",
-            description: "Title of the task.",
-          },
-          notes: {
-            type: "string",
-            description: "Notes describing the task.",
-          },
-          status: {
-            type: "string",
-            description: "Status of the task. Either 'needsAction' or 'completed'.",
-            enum: ["needsAction", "completed"],
-          },
-          due: {
-            type: "string",
-            description: "Due date of the task (RFC 3339 timestamp, e.g., '2025-01-15T00:00:00.000Z').",
-          },
-          completed: {
-            type: "string",
-            description: "Completion date of the task (RFC 3339 timestamp). Only set when status is 'completed'.",
-          },
-        },
-        required: ["taskListId", "taskId"],
+        taskListId: z.string().describe("Task list identifier."),
+        taskId: z.string().describe("Task identifier."),
+        title: z.string().optional().describe("Title of the task."),
+        notes: z.string().optional().describe("Notes describing the task."),
+        status: z
+          .enum(["needsAction", "completed"])
+          .optional()
+          .describe("Status of the task. Either 'needsAction' or 'completed'."),
+        due: z
+          .string()
+          .optional()
+          .describe("Due date of the task (RFC 3339 timestamp, e.g., '2025-01-15T00:00:00.000Z')."),
+        completed: z
+          .string()
+          .optional()
+          .describe("Completion date of the task (RFC 3339 timestamp). Only set when status is 'completed'."),
       },
     },
-    async (params: any) => {
+    async (args: any) => {
       logger.info("Tool invoked: update_task");
       try {
-        const { taskListId, taskId, ...task } = params;
+        const { taskListId, taskId, ...task } = args;
         const result = await updateTask(mcpAccessToken, taskListId, taskId, task);
         const processedData = addReadableTimestamps(result);
 
@@ -287,45 +242,28 @@ export function registerTasksTools(server: any, mcpAccessToken: string) {
     {
       description: "Updates the specified task. This method supports patch semantics.",
       inputSchema: {
-        type: "object",
-        properties: {
-          taskListId: {
-            type: "string",
-            description: "Task list identifier.",
-          },
-          taskId: {
-            type: "string",
-            description: "Task identifier.",
-          },
-          title: {
-            type: "string",
-            description: "Title of the task.",
-          },
-          notes: {
-            type: "string",
-            description: "Notes describing the task.",
-          },
-          status: {
-            type: "string",
-            description: "Status of the task. Either 'needsAction' or 'completed'.",
-            enum: ["needsAction", "completed"],
-          },
-          due: {
-            type: "string",
-            description: "Due date of the task (RFC 3339 timestamp, e.g., '2025-01-15T00:00:00.000Z').",
-          },
-          completed: {
-            type: "string",
-            description: "Completion date of the task (RFC 3339 timestamp). Only set when status is 'completed'.",
-          },
-        },
-        required: ["taskListId", "taskId"],
+        taskListId: z.string().describe("Task list identifier."),
+        taskId: z.string().describe("Task identifier."),
+        title: z.string().optional().describe("Title of the task."),
+        notes: z.string().optional().describe("Notes describing the task."),
+        status: z
+          .enum(["needsAction", "completed"])
+          .optional()
+          .describe("Status of the task. Either 'needsAction' or 'completed'."),
+        due: z
+          .string()
+          .optional()
+          .describe("Due date of the task (RFC 3339 timestamp, e.g., '2025-01-15T00:00:00.000Z')."),
+        completed: z
+          .string()
+          .optional()
+          .describe("Completion date of the task (RFC 3339 timestamp). Only set when status is 'completed'."),
       },
     },
-    async (params: any) => {
+    async (args: any) => {
       logger.info("Tool invoked: patch_task");
       try {
-        const { taskListId, taskId, ...updates } = params;
+        const { taskListId, taskId, ...updates } = args;
         const result = await patchTask(mcpAccessToken, taskListId, taskId, updates);
         const processedData = addReadableTimestamps(result);
 
@@ -357,21 +295,12 @@ export function registerTasksTools(server: any, mcpAccessToken: string) {
     {
       description: "Deletes the specified task from the task list.",
       inputSchema: {
-        type: "object",
-        properties: {
-          taskListId: {
-            type: "string",
-            description: "Task list identifier.",
-          },
-          taskId: {
-            type: "string",
-            description: "Task identifier.",
-          },
-        },
-        required: ["taskListId", "taskId"],
+        taskListId: z.string().describe("Task list identifier."),
+        taskId: z.string().describe("Task identifier."),
       },
     },
-    async ({ taskListId, taskId }: { taskListId: string; taskId: string }) => {
+    async (args: any) => {
+      const { taskListId, taskId } = args;
       logger.info("Tool invoked: delete_task");
       try {
         await deleteTask(mcpAccessToken, taskListId, taskId);
@@ -404,17 +333,11 @@ export function registerTasksTools(server: any, mcpAccessToken: string) {
     {
       description: "Clears all completed tasks from the specified task list. The affected tasks will be marked as 'hidden' and no longer be returned by default when retrieving all tasks for a task list.",
       inputSchema: {
-        type: "object",
-        properties: {
-          taskListId: {
-            type: "string",
-            description: "Task list identifier.",
-          },
-        },
-        required: ["taskListId"],
+        taskListId: z.string().describe("Task list identifier."),
       },
     },
-    async ({ taskListId }: { taskListId: string }) => {
+    async (args: any) => {
+      const { taskListId } = args;
       logger.info("Tool invoked: clear_completed_tasks");
       try {
         await clearTasks(mcpAccessToken, taskListId);
@@ -447,29 +370,20 @@ export function registerTasksTools(server: any, mcpAccessToken: string) {
     {
       description: "Moves the specified task to another position in the destination task list. This can be used to change a task's parent task or position among its sibling tasks.",
       inputSchema: {
-        type: "object",
-        properties: {
-          taskListId: {
-            type: "string",
-            description: "Task list identifier.",
-          },
-          taskId: {
-            type: "string",
-            description: "Task identifier.",
-          },
-          parent: {
-            type: "string",
-            description: "New parent task identifier. If not specified, the task is moved to the top level.",
-          },
-          previous: {
-            type: "string",
-            description: "New previous sibling task identifier. If not specified, the task is moved to the first position among its siblings.",
-          },
-        },
-        required: ["taskListId", "taskId"],
+        taskListId: z.string().describe("Task list identifier."),
+        taskId: z.string().describe("Task identifier."),
+        parent: z
+          .string()
+          .optional()
+          .describe("New parent task identifier. If not specified, the task is moved to the top level."),
+        previous: z
+          .string()
+          .optional()
+          .describe("New previous sibling task identifier. If not specified, the task is moved to the first position among its siblings."),
       },
     },
-    async ({ taskListId, taskId, parent, previous }: any) => {
+    async (args: any) => {
+      const { taskListId, taskId, parent, previous } = args;
       logger.info("Tool invoked: move_task");
       try {
         const result = await moveTask(mcpAccessToken, taskListId, taskId, parent, previous);

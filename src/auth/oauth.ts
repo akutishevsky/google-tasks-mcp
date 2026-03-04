@@ -1,9 +1,9 @@
 import { Hono } from "hono";
-import { tokenStore } from "./token-store.js";
+import { tokenStore } from "./token-store.ts";
 import crypto from "node:crypto";
 import { openKv } from "@deno/kv";
-import { createLogger } from "../utils/logger.js";
-import { rateLimit } from "../server/rate-limiter.js";
+import { createLogger } from "../utils/logger.ts";
+import { rateLimit } from "../server/rate-limiter.ts";
 
 const logger = createLogger({ component: "oauth" });
 

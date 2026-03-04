@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { readFile } from "node:fs/promises";
-import { createOAuthRouter } from "../auth/oauth.js";
-import { authenticateBearer } from "./middleware.js";
-import { handleMcpGet, handleMcpPost } from "./mcp-endpoints.js";
+import { createOAuthRouter } from "../auth/oauth.ts";
+import { authenticateBearer } from "./middleware.ts";
+import { handleMcpGet, handleMcpPost } from "./mcp-endpoints.ts";
 
 export interface ServerConfig {
   oauthConfig: {

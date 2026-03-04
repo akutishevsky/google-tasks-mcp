@@ -1,5 +1,5 @@
 import { openKv } from "@deno/kv";
-import { encrypt, decrypt } from "../utils/encryption.js";
+import { encrypt, decrypt } from "../utils/encryption.ts";
 
 export interface TokenData {
   googleAccessToken: string;

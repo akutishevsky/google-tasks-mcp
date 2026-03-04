@@ -1,5 +1,5 @@
-import { registerTaskListsTools } from "./tasklists.js";
-import { registerTasksTools } from "./tasks.js";
+import { registerTaskListsTools } from "./tasklists.ts";
+import { registerTasksTools } from "./tasks.ts";
 
 export function registerAllTools(server: any, mcpAccessToken: string) {
   registerTaskListsTools(server, mcpAccessToken);

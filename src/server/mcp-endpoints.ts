@@ -1,9 +1,9 @@
 import { Context } from "hono";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
-import { HonoSSETransport, sessionManager } from "../transport/mcp-transport.js";
-import { registerAllTools } from "../tools/index.js";
-import { createLogger } from "../utils/logger.js";
+import { HonoSSETransport, sessionManager } from "../transport/mcp-transport.ts";
+import { registerAllTools } from "../tools/index.ts";
+import { createLogger } from "../utils/logger.ts";
 
 const logger = createLogger({ component: "mcp-endpoints" });
 

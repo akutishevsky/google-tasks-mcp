@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
-import { initOAuthStore } from "./auth/oauth.js";
-import { tokenStore } from "./auth/token-store.js";
-import { createApp } from "./server/app.js";
-import { setOAuthConfig } from "./config.js";
-import { initRateLimiter } from "./server/rate-limiter.js";
+import { initOAuthStore } from "./auth/oauth.ts";
+import { tokenStore } from "./auth/token-store.ts";
+import { createApp } from "./server/app.ts";
+import { setOAuthConfig } from "./config.ts";
+import { initRateLimiter } from "./server/rate-limiter.ts";
 
 await tokenStore.init();
 await initOAuthStore();

@@ -6,9 +6,9 @@ import {
   updateTaskList,
   patchTaskList,
   deleteTaskList,
-} from "../google/api.js";
-import { createLogger } from "../utils/logger.js";
-import { addReadableTimestamps } from "../utils/timestamp.js";
+} from "../google/api.ts";
+import { createLogger } from "../utils/logger.ts";
+import { addReadableTimestamps } from "../utils/timestamp.ts";
 
 const logger = createLogger({ component: "tools:tasklists" });
 

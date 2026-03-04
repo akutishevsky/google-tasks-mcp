@@ -27,7 +27,10 @@ export function createApp(config: ServerConfig) {
 
     c.header("X-Content-Type-Options", "nosniff");
     c.header("X-Frame-Options", "DENY");
-    c.header("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
+    // Only set restrictive CSP if a route-specific one hasn't been set already
+    if (!c.res.headers.get("Content-Security-Policy")) {
+      c.header("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
+    }
     c.header("Referrer-Policy", "no-referrer");
     c.header("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
   });

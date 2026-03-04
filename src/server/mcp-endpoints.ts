@@ -28,7 +28,7 @@ export async function handleMcpGet(c: Context) {
         await writer.write(encoder.encode(`event: ${event}\n`));
       }
       await writer.write(encoder.encode(`data: ${data}\n\n`));
-    } catch (error) {
+    } catch {
       // Silently handle write errors
     }
   };
@@ -73,7 +73,7 @@ export async function handleMcpGet(c: Context) {
         const heartbeat = setInterval(async () => {
           try {
             await writeSSE("", "ping");
-          } catch (error) {
+          } catch {
             clearInterval(heartbeat);
           }
         }, 15000);
@@ -83,12 +83,12 @@ export async function handleMcpGet(c: Context) {
           sessionManager.deleteSession(sessionId);
         });
 
-      } catch (error) {
+      } catch {
         logger.error("Failed to connect MCP server to transport");
         sessionManager.deleteSession(sessionId);
         writer.close();
       }
-    } catch (error) {
+    } catch {
       logger.error("Failed to initialize MCP session");
       writer.close();
     }
@@ -123,7 +123,7 @@ export async function handleMcpPost(c: Context) {
           await writer.write(encoder.encode(`event: ${event}\n`));
         }
         await writer.write(encoder.encode(`data: ${data}\n\n`));
-      } catch (error) {
+      } catch {
         // Silently handle write errors
       }
     };
@@ -169,7 +169,7 @@ export async function handleMcpPost(c: Context) {
         const heartbeat = setInterval(async () => {
           try {
             await writeSSE("", "ping");
-          } catch (error) {
+          } catch {
             clearInterval(heartbeat);
           }
         }, 15000);
@@ -179,7 +179,7 @@ export async function handleMcpPost(c: Context) {
           sessionManager.deleteSession(sessionId!);
         });
 
-      } catch (error) {
+      } catch {
         logger.error("Failed to initialize MCP session via POST");
         sessionManager.deleteSession(sessionId!);
         writer.close();
@@ -212,7 +212,7 @@ export async function handleMcpPost(c: Context) {
     await session.transport.handleIncomingMessage(message);
 
     return c.body(null, 202);
-  } catch (error) {
+  } catch {
     logger.error("Failed to process incoming MCP message");
     return c.json({
       error: "internal_error",

@@ -55,7 +55,7 @@ async function makeGoogleRequest(
   return response.json();
 }
 
-export async function listTaskLists(mcpToken: string, maxResults?: number, pageToken?: string) {
+export function listTaskLists(mcpToken: string, maxResults?: number, pageToken?: string) {
   const params = new URLSearchParams();
   if (maxResults) params.append("maxResults", maxResults.toString());
   if (pageToken) params.append("pageToken", pageToken);
@@ -64,38 +64,38 @@ export async function listTaskLists(mcpToken: string, maxResults?: number, pageT
   return makeGoogleRequest(mcpToken, `/users/@me/lists${query}`);
 }
 
-export async function getTaskList(mcpToken: string, taskListId: string) {
+export function getTaskList(mcpToken: string, taskListId: string) {
   return makeGoogleRequest(mcpToken, `/users/@me/lists/${taskListId}`);
 }
 
-export async function insertTaskList(mcpToken: string, title: string) {
+export function insertTaskList(mcpToken: string, title: string) {
   return makeGoogleRequest(mcpToken, `/users/@me/lists`, {
     method: "POST",
     body: JSON.stringify({ title }),
   });
 }
 
-export async function updateTaskList(mcpToken: string, taskListId: string, title: string) {
+export function updateTaskList(mcpToken: string, taskListId: string, title: string) {
   return makeGoogleRequest(mcpToken, `/users/@me/lists/${taskListId}`, {
     method: "PUT",
     body: JSON.stringify({ id: taskListId, title }),
   });
 }
 
-export async function patchTaskList(mcpToken: string, taskListId: string, updates: any) {
+export function patchTaskList(mcpToken: string, taskListId: string, updates: any) {
   return makeGoogleRequest(mcpToken, `/users/@me/lists/${taskListId}`, {
     method: "PATCH",
     body: JSON.stringify(updates),
   });
 }
 
-export async function deleteTaskList(mcpToken: string, taskListId: string) {
+export function deleteTaskList(mcpToken: string, taskListId: string) {
   return makeGoogleRequest(mcpToken, `/users/@me/lists/${taskListId}`, {
     method: "DELETE",
   });
 }
 
-export async function listTasks(
+export function listTasks(
   mcpToken: string,
   taskListId: string,
   options?: {
@@ -127,11 +127,11 @@ export async function listTasks(
   return makeGoogleRequest(mcpToken, `/lists/${taskListId}/tasks${query}`);
 }
 
-export async function getTask(mcpToken: string, taskListId: string, taskId: string) {
+export function getTask(mcpToken: string, taskListId: string, taskId: string) {
   return makeGoogleRequest(mcpToken, `/lists/${taskListId}/tasks/${taskId}`);
 }
 
-export async function insertTask(mcpToken: string, taskListId: string, task: any, parent?: string, previous?: string) {
+export function insertTask(mcpToken: string, taskListId: string, task: any, parent?: string, previous?: string) {
   const params = new URLSearchParams();
   if (parent) params.append("parent", parent);
   if (previous) params.append("previous", previous);
@@ -143,33 +143,33 @@ export async function insertTask(mcpToken: string, taskListId: string, task: any
   });
 }
 
-export async function updateTask(mcpToken: string, taskListId: string, taskId: string, task: any) {
+export function updateTask(mcpToken: string, taskListId: string, taskId: string, task: any) {
   return makeGoogleRequest(mcpToken, `/lists/${taskListId}/tasks/${taskId}`, {
     method: "PUT",
     body: JSON.stringify({ ...task, id: taskId }),
   });
 }
 
-export async function patchTask(mcpToken: string, taskListId: string, taskId: string, updates: any) {
+export function patchTask(mcpToken: string, taskListId: string, taskId: string, updates: any) {
   return makeGoogleRequest(mcpToken, `/lists/${taskListId}/tasks/${taskId}`, {
     method: "PATCH",
     body: JSON.stringify(updates),
   });
 }
 
-export async function deleteTask(mcpToken: string, taskListId: string, taskId: string) {
+export function deleteTask(mcpToken: string, taskListId: string, taskId: string) {
   return makeGoogleRequest(mcpToken, `/lists/${taskListId}/tasks/${taskId}`, {
     method: "DELETE",
   });
 }
 
-export async function clearTasks(mcpToken: string, taskListId: string) {
+export function clearTasks(mcpToken: string, taskListId: string) {
   return makeGoogleRequest(mcpToken, `/lists/${taskListId}/clear`, {
     method: "POST",
   });
 }
 
-export async function moveTask(
+export function moveTask(
   mcpToken: string,
   taskListId: string,
   taskId: string,

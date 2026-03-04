@@ -23,7 +23,6 @@ export function rateLimit(config: RateLimitConfig) {
     const key = ["rate_limit", c.req.path, ip];
 
     const now = Date.now();
-    const windowStart = now - config.windowMs;
 
     const entry = await kv.get<{ count: number; resetAt: number }>(key);
 

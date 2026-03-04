@@ -1,3 +1,5 @@
+import process from "node:process";
+
 type LogLevel = "trace" | "debug" | "info" | "warn" | "error";
 
 interface LogContext {

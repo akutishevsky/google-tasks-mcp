@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import process from "node:process";
+import { Buffer } from "node:buffer";
 
 const ALGORITHM = "aes-256-gcm";
 const KEY_LENGTH = 32;
@@ -40,7 +42,7 @@ export function decrypt(encryptedData: string): string {
   const key = getEncryptionKey();
   const buffer = Buffer.from(encryptedData, "base64");
 
-  const salt = buffer.subarray(0, SALT_LENGTH);
+  const _salt = buffer.subarray(0, SALT_LENGTH);
   const iv = buffer.subarray(SALT_LENGTH, SALT_LENGTH + IV_LENGTH);
   const tag = buffer.subarray(
     SALT_LENGTH + IV_LENGTH,

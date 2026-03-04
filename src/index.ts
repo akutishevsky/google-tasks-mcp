@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import process from "node:process";
 import { initOAuthStore } from "./auth/oauth.ts";
 import { tokenStore } from "./auth/token-store.ts";
 import { createApp } from "./server/app.ts";

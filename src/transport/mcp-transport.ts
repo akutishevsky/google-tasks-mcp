@@ -16,7 +16,7 @@ export class HonoSSETransport implements Transport {
   private closeHandler: (() => void) | null = null;
   private _closed = false;
 
-  start(): void {
+  async start(): Promise<void> {
     // Transport is started when stream is attached
   }
 
@@ -62,7 +62,8 @@ export class HonoSSETransport implements Transport {
     }
   }
 
-  close(): Promise<void> | void {
+  // deno-lint-ignore require-await
+  async close(): Promise<void> {
     if (this._closed) {
       return;
     }

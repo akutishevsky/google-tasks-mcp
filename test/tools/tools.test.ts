@@ -3,7 +3,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { startTestServer, type TestServer } from "../support/test-server.ts";
 import { login } from "../support/oauth-driver.ts";
-import { callTool } from "../support/mcp-client.ts";
+import { callTool, mcp } from "../support/mcp-client.ts";
 import { loadFixture } from "../support/google-fake.ts";
 import { TOOL_CASES } from "../support/tool-cases.ts";
 
@@ -20,7 +20,11 @@ function withReadable(v: unknown): unknown {
     const out: Record<string, unknown> = {};
     for (const [k, x] of Object.entries(v)) {
       out[k] = withReadable(x);
-      if (TS_KEYS.has(k) && typeof x === "string") out[`${k}_readable`] = new Date(x).toLocaleString("en-US", { timeZone: "UTC" });
+      if (k === "due" && typeof x === "string") {
+        out.due_readable = new Date(x).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "long", year: "numeric", month: "long", day: "numeric" });
+      } else if (TS_KEYS.has(k) && typeof x === "string") {
+        out[`${k}_readable`] = new Date(x).toLocaleString("en-US", { timeZone: "UTC" });
+      }
     }
     return out;
   }
@@ -116,5 +120,92 @@ describe("tools", () => {
     s.google.queue("tasks.list.ok");
     const r2 = await callTool(s.app, token, "list_tasks", { taskListId: "PLANTED_LIST_1", showCompleted: true, showHidden: true });
     expect(text(r2)).not.toContain("⚠️");
+  });
+});
+
+// Due dates are calendar dates; due times live in the title because Google's
+// API discards them. See docs/specs/2026-10-23-due-time-design.md.
+describe("due time", () => {
+  let s: TestServer;
+  let token: string;
+  const L = "PLANTED_LIST_1";
+  const T = "PLANTED_TASK_1";
+  const body = (c: { body: string }) => JSON.parse(c.body);
+
+  beforeEach(async () => {
+    s = await startTestServer();
+    token = (await login(s.app, s.google)).tokens.access_token;
+  });
+
+  it("insert_task_appends_time_to_title_and_normalises_due", async () => {
+    s.google.queue("tasks.insert.ok");
+    const r = await callTool(s.app, token, "insert_task", { taskListId: L, title: "Call the dentist", due: "2026-10-20", dueTime: "15:30" });
+    expect(r.result.isError).toBeFalsy();
+    expect(body(s.google.calls.at(-1)!)).toMatchObject({ title: "Call the dentist (at 3:30 PM)", due: "2026-10-20T00:00:00.000Z" });
+    expect(body(s.google.calls.at(-1)!)).not.toHaveProperty("dueTime");
+  });
+
+  it("insert_task_keeps_local_date_for_offset_timestamp", async () => {
+    s.google.queue("tasks.insert.ok");
+    await callTool(s.app, token, "insert_task", { taskListId: L, title: "T", due: "2025-01-15T22:00:00-08:00" });
+    expect(body(s.google.calls.at(-1)!).due).toBe("2025-01-15T00:00:00.000Z");
+  });
+
+  it("insert_task_invalid_due_no_google_call", async () => {
+    const r = await callTool(s.app, token, "insert_task", { taskListId: L, title: "T", due: "2025-02-30" });
+    expect(r.result.isError).toBe(true);
+    expect(text(r)).toContain('Invalid due date "2025-02-30": expected YYYY-MM-DD');
+    expect(tasksCalls(s)).toHaveLength(0);
+  });
+
+  it("patch_task_due_time_keeps_title", async () => {
+    s.google.queue("tasks.get.ok"); // title "Task 1"
+    s.google.queue("tasks.patch.ok");
+    await callTool(s.app, token, "patch_task", { taskListId: L, taskId: T, dueTime: "16:30", dueTimeQualifier: "before" });
+    const calls = tasksCalls(s);
+    expect(calls.map((c) => c.method)).toEqual(["GET", "PATCH"]);
+    expect(body(calls[1])).toEqual({ title: "Task 1 (before 4:30 PM)" });
+  });
+
+  it("update_task_with_title_and_due_time_does_not_fetch", async () => {
+    s.google.queue("tasks.update.ok");
+    await callTool(s.app, token, "update_task", { taskListId: L, taskId: T, title: "Dentist (at 3:30 PM)", dueTime: "" });
+    const calls = tasksCalls(s);
+    expect(calls.map((c) => c.method)).toEqual(["PUT"]);
+    expect(body(calls[0]).title).toBe("Dentist");
+  });
+
+  it("get_task_exposes_due_time_fields", async () => {
+    const f = loadFixture("tasks.get.ok");
+    s.google.queue("tasks.get.ok", { body: { ...(f.response.body as object), title: "Task 1 (at 3:30 PM)" } });
+    const r = await callTool(s.app, token, "get_task", { taskListId: L, taskId: T });
+    expect(jsonPart(text(r))).toMatchObject({ title: "Task 1 (at 3:30 PM)", due_time: "15:30", due_time_qualifier: "at" });
+  });
+
+  it("update_task_due_time_only_keeps_other_fields", async () => {
+    s.google.queue("tasks.get.ok"); // title "Task 1", due 2026-10-20, notes, status
+    s.google.queue("tasks.update.ok");
+    await callTool(s.app, token, "update_task", { taskListId: L, taskId: T, dueTime: "15:00" });
+    const calls = tasksCalls(s);
+    expect(calls.map((c) => c.method)).toEqual(["GET", "PUT"]);
+    // PUT is a full replacement: fields the caller did not change must survive.
+    expect(body(calls[1])).toMatchObject({ title: "Task 1 (at 3:00 PM)", due: "2026-10-20T00:00:00.000Z", notes: "Notes for task 1", status: "needsAction" });
+  });
+
+  it("title_descriptions_warn_about_the_suffix", async () => {
+    const r = await mcp(s.app, token, "tools/list");
+    const tools = r.messages.find((m) => m.result)!.result.tools as Array<{ name: string; inputSchema: any }>;
+    for (const name of ["insert_task", "update_task", "patch_task"]) {
+      const desc = tools.find((t) => t.name === name)!.inputSchema.properties.title.description as string;
+      expect(desc, name).toContain("dueTime");
+    }
+  });
+
+  it("insert_task_rejects_malformed_due_time", async () => {
+    s.google.queue("tasks.insert.ok");
+    const r = await callTool(s.app, token, "insert_task", { taskListId: L, title: "T", dueTime: "3:30 PM" });
+    expect(r.error ?? r.result?.isError).toBeTruthy();
+    expect(tasksCalls(s)).toHaveLength(0);
+    expect(s.google.pending()).toBe(1);
   });
 });

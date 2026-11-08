@@ -12,8 +12,68 @@ import {
 } from "../google/api.ts";
 import { createLogger } from "../utils/logger.ts";
 import { addReadableTimestamps } from "../utils/timestamp.ts";
+import {
+  addDueTimeFields,
+  DUE_TIME_PATTERN,
+  DUE_TIME_QUALIFIERS,
+  normalizeDueDate,
+  withDueTime,
+} from "../utils/due.ts";
 
 const logger = createLogger({ component: "tools:tasks" });
+
+// Google keeps only the calendar date of `due`; the time of day is recorded
+// as text at the end of the title. See docs/specs/2026-10-23-due-time-design.md.
+const dueInputSchema = {
+  due: z
+    .string()
+    .optional()
+    .describe(
+      "Due date as YYYY-MM-DD in the user's local calendar (resolve words like \"tomorrow\" in the user's timezone first). Google Tasks keeps only the date; use dueTime for the time of day.",
+    ),
+  dueTime: z
+    .string()
+    .regex(new RegExp(`^(|${DUE_TIME_PATTERN.source.slice(1, -1)})$`))
+    .optional()
+    .describe(
+      "Time of day the task is due, 24-hour HH:MM (e.g. \"15:30\"). Google's API cannot store a time, so the server records it as text at the end of the title, e.g. \"Call dentist (at 3:30 PM)\". Pass \"\" to remove an existing time.",
+    ),
+  dueTimeQualifier: z
+    .enum(DUE_TIME_QUALIFIERS as [string, ...string[]])
+    .optional()
+    .describe("Word before the time in the title: \"at\" (default), \"before\" or \"by\". Only used with dueTime."),
+};
+
+// Turns tool arguments into the Google task payload: normalises `due` and
+// folds `dueTime`/`dueTimeQualifier` into the title. Fetches the current task
+// only when a time is given without a title (update/patch). For `update`
+// (Google PUT, a full replacement) the fetched task is merged under the
+// caller's fields so an unmentioned due date or notes are not wiped.
+async function toGoogleTask(
+  client: GoogleClient,
+  taskListId: string,
+  taskId: string | undefined,
+  args: any,
+  mode: "insert" | "update" | "patch",
+) {
+  const { dueTime, dueTimeQualifier, ...task } = args;
+  if (typeof task.due === "string") task.due = normalizeDueDate(task.due);
+  if (typeof dueTime === "string") {
+    let base = typeof task.title === "string" ? task.title : "";
+    if (typeof task.title !== "string" && taskId) {
+      const current = await getTask(client, taskListId, taskId);
+      base = current.title ?? "";
+      if (mode === "update") Object.assign(task, { ...current, ...task });
+    }
+    task.title = withDueTime(base, dueTime, dueTimeQualifier);
+  }
+  return task;
+}
+
+const TITLE_DESCRIPTION =
+  "Title of the task. A due time is kept as a trailing suffix like \"(at 3:30 PM)\"; when renaming, keep that suffix or pass dueTime again.";
+
+const presentTask = (result: unknown) => addDueTimeFields(addReadableTimestamps(result));
 
 export function registerTasksTools(server: any, client: GoogleClient) {
   server.registerTool(
@@ -33,11 +93,11 @@ export function registerTasksTools(server: any, client: GoogleClient) {
         dueMax: z
           .string()
           .optional()
-          .describe("Upper bound for a task's due date (RFC 3339 timestamp) to filter by."),
+          .describe("Upper bound for a task's due date (RFC 3339 timestamp) to filter by. Google compares against midnight UTC of the due date."),
         dueMin: z
           .string()
           .optional()
-          .describe("Lower bound for a task's due date (RFC 3339 timestamp) to filter by."),
+          .describe("Lower bound for a task's due date (RFC 3339 timestamp) to filter by. Google compares against midnight UTC of the due date."),
         maxResults: z
           .number()
           .optional()
@@ -69,7 +129,7 @@ export function registerTasksTools(server: any, client: GoogleClient) {
       try {
         const { taskListId, dueMin, dueMax, showCompleted, showHidden, ...options } = args;
         const result = await listTasks(client, taskListId, { dueMin, dueMax, showCompleted, showHidden, ...options });
-        const processedData = addReadableTimestamps(result);
+        const processedData = presentTask(result);
 
         let responseText = JSON.stringify(processedData, null, 2);
         const warnings: string[] = [];
@@ -125,7 +185,7 @@ export function registerTasksTools(server: any, client: GoogleClient) {
       logger.info("Tool invoked: get_task");
       try {
         const result = await getTask(client, taskListId, taskId);
-        const processedData = addReadableTimestamps(result);
+        const processedData = presentTask(result);
 
         return {
           content: [
@@ -156,12 +216,9 @@ export function registerTasksTools(server: any, client: GoogleClient) {
       description: "Creates a new task on the specified task list.",
       inputSchema: {
         taskListId: z.string().describe("Task list identifier."),
-        title: z.string().describe("Title of the task."),
+        title: z.string().describe(TITLE_DESCRIPTION),
         notes: z.string().optional().describe("Notes describing the task."),
-        due: z
-          .string()
-          .optional()
-          .describe("Due date of the task (RFC 3339 timestamp, e.g., '2025-01-15T00:00:00.000Z')."),
+        ...dueInputSchema,
         parent: z
           .string()
           .optional()
@@ -175,9 +232,10 @@ export function registerTasksTools(server: any, client: GoogleClient) {
     async (args: any) => {
       logger.info("Tool invoked: insert_task");
       try {
-        const { taskListId, parent, previous, ...task } = args;
+        const { taskListId, parent, previous, ...rest } = args;
+        const task = await toGoogleTask(client, taskListId, undefined, rest, "insert");
         const result = await insertTask(client, taskListId, task, parent, previous);
-        const processedData = addReadableTimestamps(result);
+        const processedData = presentTask(result);
 
         return {
           content: [
@@ -209,16 +267,13 @@ export function registerTasksTools(server: any, client: GoogleClient) {
       inputSchema: {
         taskListId: z.string().describe("Task list identifier."),
         taskId: z.string().describe("Task identifier."),
-        title: z.string().optional().describe("Title of the task."),
+        title: z.string().optional().describe(TITLE_DESCRIPTION),
         notes: z.string().optional().describe("Notes describing the task."),
         status: z
           .enum(["needsAction", "completed"])
           .optional()
           .describe("Status of the task. Either 'needsAction' or 'completed'."),
-        due: z
-          .string()
-          .optional()
-          .describe("Due date of the task (RFC 3339 timestamp, e.g., '2025-01-15T00:00:00.000Z')."),
+        ...dueInputSchema,
         completed: z
           .string()
           .optional()
@@ -228,9 +283,10 @@ export function registerTasksTools(server: any, client: GoogleClient) {
     async (args: any) => {
       logger.info("Tool invoked: update_task");
       try {
-        const { taskListId, taskId, ...task } = args;
+        const { taskListId, taskId, ...rest } = args;
+        const task = await toGoogleTask(client, taskListId, taskId, rest, "update");
         const result = await updateTask(client, taskListId, taskId, task);
-        const processedData = addReadableTimestamps(result);
+        const processedData = presentTask(result);
 
         return {
           content: [
@@ -262,16 +318,13 @@ export function registerTasksTools(server: any, client: GoogleClient) {
       inputSchema: {
         taskListId: z.string().describe("Task list identifier."),
         taskId: z.string().describe("Task identifier."),
-        title: z.string().optional().describe("Title of the task."),
+        title: z.string().optional().describe(TITLE_DESCRIPTION),
         notes: z.string().optional().describe("Notes describing the task."),
         status: z
           .enum(["needsAction", "completed"])
           .optional()
           .describe("Status of the task. Either 'needsAction' or 'completed'."),
-        due: z
-          .string()
-          .optional()
-          .describe("Due date of the task (RFC 3339 timestamp, e.g., '2025-01-15T00:00:00.000Z')."),
+        ...dueInputSchema,
         completed: z
           .string()
           .optional()
@@ -281,9 +334,10 @@ export function registerTasksTools(server: any, client: GoogleClient) {
     async (args: any) => {
       logger.info("Tool invoked: patch_task");
       try {
-        const { taskListId, taskId, ...updates } = args;
+        const { taskListId, taskId, ...rest } = args;
+        const updates = await toGoogleTask(client, taskListId, taskId, rest, "patch");
         const result = await patchTask(client, taskListId, taskId, updates);
-        const processedData = addReadableTimestamps(result);
+        const processedData = presentTask(result);
 
         return {
           content: [
@@ -405,7 +459,7 @@ export function registerTasksTools(server: any, client: GoogleClient) {
       logger.info("Tool invoked: move_task");
       try {
         const result = await moveTask(client, taskListId, taskId, parent, previous);
-        const processedData = addReadableTimestamps(result);
+        const processedData = presentTask(result);
 
         return {
           content: [

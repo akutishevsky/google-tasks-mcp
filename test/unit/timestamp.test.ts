@@ -1,6 +1,7 @@
 // Pure transform: addReadableTimestamps. Oracle: properties, TZ=UTC.
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
+import process from "node:process";
 import { addReadableTimestamps } from "../../src/utils/timestamp.ts";
 
 const TS_KEYS = ["updated", "completed", "due", "created"] as const;
@@ -84,6 +85,20 @@ describe("addReadableTimestamps", () => {
         expect(addReadableTimestamps(once)).toEqual(once);
       }),
     );
+  });
+
+  it("due_readable_is_utc_calendar_date_with_weekday", () => {
+    expect(addReadableTimestamps({ due: "2026-10-20T00:00:00.000Z" }).due_readable).toBe("Tuesday, October 20, 2026");
+  });
+
+  it("due_readable_ignores_server_tz", () => {
+    const prev = process.env.TZ;
+    process.env.TZ = "America/Los_Angeles";
+    try {
+      expect(addReadableTimestamps({ due: "2026-10-20T00:00:00.000Z" }).due_readable).toBe("Tuesday, October 20, 2026");
+    } finally {
+      process.env.TZ = prev;
+    }
   });
 
   it("proto_key_copied_as_data", () => {

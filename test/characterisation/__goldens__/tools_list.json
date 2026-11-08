@@ -159,11 +159,11 @@
               },
               "dueMax": {
                 "type": "string",
-                "description": "Upper bound for a task's due date (RFC 3339 timestamp) to filter by."
+                "description": "Upper bound for a task's due date (RFC 3339 timestamp) to filter by. Google compares against midnight UTC of the due date."
               },
               "dueMin": {
                 "type": "string",
-                "description": "Lower bound for a task's due date (RFC 3339 timestamp) to filter by."
+                "description": "Lower bound for a task's due date (RFC 3339 timestamp) to filter by. Google compares against midnight UTC of the due date."
               },
               "maxResults": {
                 "type": "number",
@@ -238,7 +238,7 @@
               },
               "title": {
                 "type": "string",
-                "description": "Title of the task."
+                "description": "Title of the task. A due time is kept as a trailing suffix like \"(at 3:30 PM)\"; when renaming, keep that suffix or pass dueTime again."
               },
               "notes": {
                 "type": "string",
@@ -246,7 +246,21 @@
               },
               "due": {
                 "type": "string",
-                "description": "Due date of the task (RFC 3339 timestamp, e.g., '2025-01-15T00:00:00.000Z')."
+                "description": "Due date as YYYY-MM-DD in the user's local calendar (resolve words like \"tomorrow\" in the user's timezone first). Google Tasks keeps only the date; use dueTime for the time of day."
+              },
+              "dueTime": {
+                "type": "string",
+                "pattern": "^(|([01]\\d|2[0-3]):[0-5]\\d)$",
+                "description": "Time of day the task is due, 24-hour HH:MM (e.g. \"15:30\"). Google's API cannot store a time, so the server records it as text at the end of the title, e.g. \"Call dentist (at 3:30 PM)\". Pass \"\" to remove an existing time."
+              },
+              "dueTimeQualifier": {
+                "type": "string",
+                "enum": [
+                  "at",
+                  "before",
+                  "by"
+                ],
+                "description": "Word before the time in the title: \"at\" (default), \"before\" or \"by\". Only used with dueTime."
               },
               "parent": {
                 "type": "string",
@@ -284,7 +298,7 @@
               },
               "title": {
                 "type": "string",
-                "description": "Title of the task."
+                "description": "Title of the task. A due time is kept as a trailing suffix like \"(at 3:30 PM)\"; when renaming, keep that suffix or pass dueTime again."
               },
               "notes": {
                 "type": "string",
@@ -300,7 +314,21 @@
               },
               "due": {
                 "type": "string",
-                "description": "Due date of the task (RFC 3339 timestamp, e.g., '2025-01-15T00:00:00.000Z')."
+                "description": "Due date as YYYY-MM-DD in the user's local calendar (resolve words like \"tomorrow\" in the user's timezone first). Google Tasks keeps only the date; use dueTime for the time of day."
+              },
+              "dueTime": {
+                "type": "string",
+                "pattern": "^(|([01]\\d|2[0-3]):[0-5]\\d)$",
+                "description": "Time of day the task is due, 24-hour HH:MM (e.g. \"15:30\"). Google's API cannot store a time, so the server records it as text at the end of the title, e.g. \"Call dentist (at 3:30 PM)\". Pass \"\" to remove an existing time."
+              },
+              "dueTimeQualifier": {
+                "type": "string",
+                "enum": [
+                  "at",
+                  "before",
+                  "by"
+                ],
+                "description": "Word before the time in the title: \"at\" (default), \"before\" or \"by\". Only used with dueTime."
               },
               "completed": {
                 "type": "string",
@@ -334,7 +362,7 @@
               },
               "title": {
                 "type": "string",
-                "description": "Title of the task."
+                "description": "Title of the task. A due time is kept as a trailing suffix like \"(at 3:30 PM)\"; when renaming, keep that suffix or pass dueTime again."
               },
               "notes": {
                 "type": "string",
@@ -350,7 +378,21 @@
               },
               "due": {
                 "type": "string",
-                "description": "Due date of the task (RFC 3339 timestamp, e.g., '2025-01-15T00:00:00.000Z')."
+                "description": "Due date as YYYY-MM-DD in the user's local calendar (resolve words like \"tomorrow\" in the user's timezone first). Google Tasks keeps only the date; use dueTime for the time of day."
+              },
+              "dueTime": {
+                "type": "string",
+                "pattern": "^(|([01]\\d|2[0-3]):[0-5]\\d)$",
+                "description": "Time of day the task is due, 24-hour HH:MM (e.g. \"15:30\"). Google's API cannot store a time, so the server records it as text at the end of the title, e.g. \"Call dentist (at 3:30 PM)\". Pass \"\" to remove an existing time."
+              },
+              "dueTimeQualifier": {
+                "type": "string",
+                "enum": [
+                  "at",
+                  "before",
+                  "by"
+                ],
+                "description": "Word before the time in the title: \"at\" (default), \"before\" or \"by\". Only used with dueTime."
               },
               "completed": {
                 "type": "string",

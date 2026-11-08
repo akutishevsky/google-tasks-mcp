@@ -123,6 +123,28 @@ Once connected, Claude can use these tools to access your data:
 - `clear_completed_tasks` - Clears all completed tasks from a list
 - `move_task` - Moves a task to a different position or parent
 
+### Due dates and times
+
+Google's Tasks API keeps only the **date** of a task's due field and discards
+the time: "Only date information is recorded; the time portion of the
+timestamp is discarded when setting this field. It isn't possible to read or
+write the time that a task is scheduled for using the API."
+([Task resource reference](https://developers.google.com/workspace/tasks/reference/rest/v1/tasks)).
+Times you set in the Google Tasks app are stored privately and are not
+visible through the API either.
+
+This server works around that in two ways:
+
+- **Dates are calendar dates.** The assistant resolves words like "tomorrow"
+  in your timezone and sends a plain `YYYY-MM-DD`. The server never converts
+  it through UTC, so the task lands on the day you meant.
+- **Times go in the title.** A time of day is recorded as text at the end of
+  the title, for example `Call the dentist (at 3:30 PM)` or
+  `Submit report (before 4:30 PM)`. It is your wall-clock time, so there is
+  no timezone to get wrong. When the server reads tasks back it exposes the
+  time as `due_time` (24-hour `HH:MM`) and `due_time_qualifier` next to the
+  due date, so the assistant can answer questions like "what is due at 3pm".
+
 ### Example Conversations
 
 Try asking Claude:
@@ -131,6 +153,7 @@ Try asking Claude:
 - "Show me all tasks in my Work list"
 - "Create a new task list called 'Personal Projects'"
 - "Add a task 'Review Q4 reports' to my Work list with due date next Friday"
+- "Add 'Call the dentist' to my Personal list for tomorrow at 3:30pm"
 - "Mark the task 'Buy groceries' as completed"
 - "Move 'Write proposal' task to be a subtask of 'Client project'"
 - "Clear all completed tasks from my Shopping list"

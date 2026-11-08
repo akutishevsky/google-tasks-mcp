@@ -1,0 +1,11 @@
+{
+  "_provenance": "docs",
+  "request": {
+    "method": "POST",
+    "path": "/revoke"
+  },
+  "response": {
+    "status": 200,
+    "body": {}
+  }
+}

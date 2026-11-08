@@ -1,0 +1,18 @@
+{
+  "_provenance": "docs",
+  "request": {
+    "method": "POST",
+    "path": "/tasks/v1/users/@me/lists"
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "kind": "tasks#taskList",
+      "id": "PLANTED_LIST_2",
+      "etag": "\"PLANTED_ETAG\"",
+      "title": "New list",
+      "updated": "2026-10-16T09:30:00.000Z",
+      "selfLink": "https://www.googleapis.com/tasks/v1/users/@me/lists/PLANTED_LIST_1"
+    }
+  }
+}

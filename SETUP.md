@@ -4,7 +4,9 @@ This runbook covers everything needed to deploy this server to Deno Deploy and c
 
 It is written for a single user (personal) deployment. Where a step requires your own Google or Deno login, it is called out explicitly.
 
-The MCP server is remote, served over HTTP plus SSE at the /mcp endpoint with bearer auth. It implements OAuth discovery at /.well-known/oauth-authorization-server, an authorization endpoint at /authorize, and a callback at /callback. The OAuth scope used is https://www.googleapis.com/auth/tasks.
+The MCP server is remote, served over stateless Streamable HTTP (JSON responses) at the /mcp endpoint with bearer auth. It implements OAuth discovery at /.well-known/oauth-authorization-server and /.well-known/oauth-protected-resource, an authorization endpoint at /authorize, and a callback at /callback. The Google scopes used are openid, email and https://www.googleapis.com/auth/tasks.
+
+For a shared server for a team on one Google Workspace domain (Cloud Run, Firestore, Cloud KMS), see DEPLOY.md instead; the Deployment Modes section of the README compares the options.
 
 ## Overview of what you will do
 
@@ -37,7 +39,7 @@ A Google account that has Google Tasks. A Deno Deploy account (sign in with GitH
    - App name: Google Tasks MCP (or any name you prefer).
    - User support email: your email.
    - Developer contact email: your email.
-4. On the Scopes step, click Add or Remove Scopes, then add this scope: https://www.googleapis.com/auth/tasks
+4. On the Scopes step, click Add or Remove Scopes, then add these scopes: openid, email, and https://www.googleapis.com/auth/tasks
    (If it is not in the filtered list, paste it into the "Manually add scopes" box, click Add to Table, then Update.)
 5. On the Test users step, click Add Users and add the Google account you will use with Claude. This must be the same account you authorize later.
 6. Save and continue to the summary.
@@ -114,6 +116,8 @@ Set these in Deno Deploy under Project Settings, Environment Variables:
 | LOG_LEVEL | No | info (or debug while troubleshooting). |
 
 Keep ENCRYPTION_SECRET stable across restarts. If it changes, previously stored encrypted tokens can no longer be decrypted and you will have to re-authorize.
+
+The other settings (ALLOWED_DOMAIN, ALLOWED_REDIRECT_URIS, ISSUER_URL and more) are optional; see the configuration table in MAINTAIN.md.
 
 ## Step 5: Update the Google OAuth redirect URI
 

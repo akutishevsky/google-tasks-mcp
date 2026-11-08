@@ -1,0 +1,45 @@
+{
+  "_provenance": "docs",
+  "request": {
+    "method": "GET",
+    "path": "/tasks/v1/lists/{tasklist}/tasks"
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "kind": "tasks#tasks",
+      "etag": "\"PLANTED_ETAG\"",
+      "nextPageToken": "P2",
+      "items": [
+        {
+          "kind": "tasks#task",
+          "id": "PLANTED_TASK_1",
+          "etag": "\"PLANTED_ETAG\"",
+          "title": "Task 1",
+          "updated": "2026-10-16T09:30:00.000Z",
+          "selfLink": "https://www.googleapis.com/tasks/v1/lists/PLANTED_LIST_1/tasks/PLANTED_TASK_1",
+          "position": "00000000000000000001",
+          "status": "needsAction",
+          "due": "2026-10-20T00:00:00.000Z",
+          "links": [],
+          "webViewLink": "https://tasks.google.com/task/PLANTED_TASK_1"
+        },
+        {
+          "kind": "tasks#task",
+          "id": "PLANTED_TASK_2",
+          "etag": "\"PLANTED_ETAG\"",
+          "title": "Task 2",
+          "updated": "2026-10-16T09:30:00.000Z",
+          "selfLink": "https://www.googleapis.com/tasks/v1/lists/PLANTED_LIST_1/tasks/PLANTED_TASK_2",
+          "position": "00000000000000000002",
+          "status": "completed",
+          "due": "2026-10-20T00:00:00.000Z",
+          "links": [],
+          "webViewLink": "https://tasks.google.com/task/PLANTED_TASK_2",
+          "completed": "2026-10-15T08:00:00.000Z",
+          "hidden": true
+        }
+      ]
+    }
+  }
+}

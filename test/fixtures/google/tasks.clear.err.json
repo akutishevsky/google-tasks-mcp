@@ -1,0 +1,24 @@
+{
+  "_provenance": "docs",
+  "request": {
+    "method": "POST",
+    "path": "/tasks/v1/lists/{tasklist}/clear"
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": 404,
+        "message": "Requested entity was not found.",
+        "errors": [
+          {
+            "message": "Requested entity was not found.",
+            "domain": "global",
+            "reason": "notFound"
+          }
+        ],
+        "status": "NOT_FOUND"
+      }
+    }
+  }
+}

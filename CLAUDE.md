@@ -4,46 +4,57 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Google Tasks MCP Server — an open-source Model Context Protocol server that lets AI assistants manage Google Tasks through natural language. Built with Hono, MCP SDK, and Deno KV. Deployed on Deno Deploy.
+Google Tasks MCP Server — an open-source Model Context Protocol server that lets AI assistants manage Google Tasks through natural language. Built with Hono, MCP SDK, and Deno KV. Runs on Deno Deploy, Node, or Cloud Run (Firestore + KMS; see `DEPLOY.md`).
 
 ## Commands
 
 - **Build**: `npm run build` (runs `tsc`)
 - **Dev (watch)**: `npm run dev` (runs `tsc --watch`)
 - **Lint**: `deno lint` (configured in `deno.json`, targets `src/`)
-- **Run**: `deno task dev` (runs compiled `build/index.js`)
+- **Run**: `deno task dev` (`deno serve` on :3000, `build/index.js`; `@deno/kv` needs `--allow-ffi`/`--allow-sys`) or `npm start` (Node, `build/node.js`; set `KV_PATH`)
+- **Revoke access**: `npm run revoke -- --email <addr> | --all [--dry-run]`
 - **Generate encryption secret**: `npm run generate-secret`
 
-No test framework is configured.
+- **Test**: `npm test` (vitest + fast-check; see `docs/specs/2026-10-17-gcp-deployment-design.md` §11)
+- **Typecheck (incl. tests)**: `npm run typecheck`
 
 ## Architecture
 
-### Entry Point & Runtime
+### Entry Points & Runtime
 
-`src/index.ts` initializes Deno KV stores (tokens, OAuth sessions, rate limiter), sets OAuth config from env vars, creates the Hono app, and exports `{ fetch: app.fetch }` for Deno Deploy.
+- `src/config.ts` — `loadConfig(env)`: the only place env vars are interpreted (the logger's `LOG_LEVEL` aside). Fails fast on invalid combinations.
+- `src/deps.ts` — `buildDeps(config)`: builds the injected `AppDeps` (`store`, `cipher`, `clock`, `config`, `fetch`). Firestore/KMS SDKs are optional and imported lazily.
+- `src/index.ts` — Deno Deploy: exports `{ fetch: app.fetch }`.
+- `src/node.ts` — Node/containers/Cloud Run: serves the app with `@hono/node-server` on `PORT`.
+- `src/cli/revoke.ts` — `npm run revoke` kill switch.
 
 ### Request Flow
 
 ```
 Client → Hono HTTP (app.ts) → Security headers middleware → CORS middleware
-  ├── OAuth routes (/register, /authorize, /callback, /token) → oauth.ts
-  ├── MCP routes (/mcp GET/POST) → Bearer auth middleware → mcp-endpoints.ts
-  │     └── Creates McpServer + HonoSSETransport per session
-  │           └── Registered tools (tools/*.ts) → google/api.ts → Google Tasks API
-  └── Static routes (/, /health, /privacy-policy, /favicon.ico)
+  ├── OAuth routes (/register, /authorize, /callback, /token) → auth/oauth.ts
+  ├── /.well-known/oauth-authorization-server, /.well-known/oauth-protected-resource[/mcp]
+  ├── POST /mcp → Bearer middleware (resolve hashed access token → grant) → mcp-endpoints.ts
+  │     └── per request: McpServer + stateless WebStandardStreamableHTTPServerTransport (JSON)
+  │           └── tools/*.ts → google/api.ts (GoogleClient) → Google Tasks API
+  └── Static routes (/, /health, /privacy-policy, /favicon.ico); PUBLIC_PAGES=false → JSON
 ```
 
 ### Key Modules
 
-- **`src/server/app.ts`** — Hono routes and security middleware. Route-specific CSP headers override the default restrictive CSP (the middleware checks `c.res.headers` before setting defaults).
-- **`src/server/mcp-endpoints.ts`** — GET creates SSE stream + MCP session; POST either creates a new session or routes messages to existing ones. Sessions use `TransformStream` for SSE output with 15s heartbeat pings.
-- **`src/transport/mcp-transport.ts`** — Custom `HonoSSETransport` implementing MCP's `Transport` interface. `SessionManager` tracks sessions with 30-minute timeout and periodic cleanup.
-- **`src/auth/oauth.ts`** — Full OAuth 2.0 with PKCE. Three-legged flow: client registers → redirects to Google → callback exchanges code → returns MCP bearer token (UUID). `OAuthStore` uses Deno KV with TTLs.
-- **`src/auth/token-store.ts`** — Encrypts Google tokens (AES-256-GCM) before storing in Deno KV. 30-day TTL.
-- **`src/google/api.ts`** — Thin wrapper over Google Tasks REST API. All calls go through `makeGoogleRequest()` which handles auth token refresh automatically (60s expiry threshold). Functions return promises directly (not async).
-- **`src/tools/tasklists.ts`** and **`src/tools/tasks.ts`** — 14 MCP tools registered via `server.registerTool()`. Each uses Zod for input schemas and `addReadableTimestamps()` for response processing.
-- **`src/utils/logger.ts`** — Logger with automatic redaction of tokens, secrets, user IDs. Set level via `LOG_LEVEL` env var.
-- **`src/utils/encryption.ts`** — AES-256-GCM with PBKDF2 key derivation (100k iterations). Requires `ENCRYPTION_SECRET` env var (32+ chars).
+- **`src/store/`** — `Store` interface (`get/set ttl/delete/take/list`), values wrapped `{ v, expiresAt }` and checked against the injected clock. `DenoKvStore` (default; **in memory on Node unless `KV_PATH`**) and `FirestoreStore`.
+- **`src/crypto/`** — `TokenCipher`: `StaticCipher` (upstream AES-256-GCM format, key derived once) and `KmsCipher` (Cloud KMS per token).
+- **`src/auth/token-store.ts`** — Grants (encrypted Google tokens, email) plus 1 h access / 30 d rotating refresh tokens, keyed by SHA-256 hash; reuse after a 60 s grace revokes the grant.
+- **`src/auth/oauth.ts`** — OAuth 2.1 + PKCE. `/authorize` validates client and redirect (400, never redirects). Google code is exchanged at `/callback` (id_token → email; `ALLOWED_DOMAIN` check). `/token` handles `authorization_code` and `refresh_token`.
+- **`src/google/client.ts`** — `GoogleClient` seam and the per-app token provider (Google refresh 60 s early, 5-minute decrypted-token cache; Google `invalid_grant` revokes the grant → 401).
+- **`src/google/api.ts`** — Thin wrapper over the Tasks REST API; functions take a `GoogleClient`, are non-async, and treat 204 as success.
+- **`src/tools/tasklists.ts`** and **`src/tools/tasks.ts`** — 14 MCP tools registered via `server.registerTool()`. Zod input schemas, `addReadableTimestamps()` on responses.
+- **`src/server/rate-limiter.ts`** — Store-backed limits; `TRUST_PROXY_HOPS` picks the client IP from the right of `X-Forwarded-For`.
+- **`src/utils/logger.ts`** — Logger with redaction of tokens, secrets, user IDs.
+
+### Tests
+
+`npm test` (vitest + fast-check), organised by the design spec §11: tool and OAuth scenarios through `app.fetch`, a store suite run against every backend (Firestore via its emulator in Docker), pure-transform properties, and security invariants checked after every HTTP test (`test/support/invariants.ts`). Google is replayed from `test/fixtures/google/` through the `fetch` seam; nothing under `src/` is mocked.
 
 ### Tool Registration Pattern
 
@@ -53,15 +64,14 @@ server.registerTool("tool_name", {
   description: "...",
   inputSchema: { param: z.string().describe("...") },
 }, async (args: any) => {
-  const result = await apiFunction(mcpAccessToken, ...);
+  const result = await apiFunction(client, ...);
   return { content: [{ type: "text", text: JSON.stringify(addReadableTimestamps(result), null, 2) }] };
 });
 ```
 
 ### Environment Variables
 
-Required: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `ENCRYPTION_SECRET`
-Optional: `PORT` (default 3000), `LOG_LEVEL` (default info), `ALLOWED_ORIGINS` (comma-separated)
+Required: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `ENCRYPTION_SECRET` (with the default `CIPHER=static`). Full table in `MAINTAIN.md`.
 
 ## Conventions
 

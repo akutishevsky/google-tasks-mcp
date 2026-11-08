@@ -9,6 +9,7 @@ A Model Context Protocol (MCP) server that brings your Google Tasks into Claude 
 ## Table of Contents
 
 - [What Can You Do With This?](#what-can-you-do-with-this)
+- [Deployment Modes](#deployment-modes)
 - [For End Users: Using the Hosted Server](#for-end-users-using-the-hosted-server)
   - [Prerequisites](#prerequisites)
   - [Setup Instructions](#setup-instructions)
@@ -47,6 +48,25 @@ This MCP server gives Claude access to your Google Tasks data, allowing you to:
 - **Natural language**: Interact with your tasks through conversation with Claude
 
 All through natural conversation with Claude or any other MCP-compatible client.
+
+## Deployment Modes
+
+The same server runs in three modes. Pick one by where it runs and who uses it;
+the MCP tools and the OAuth flow are identical in all of them.
+
+| | Deno Deploy | Node / container | Google Cloud (shared) |
+|---|---|---|---|
+| **Best for** | The hosted server; quick personal instance | Self-hosting anywhere that runs Node or Docker | A team on one Google Workspace domain |
+| **Runtime** | Deno Deploy (`build/index.js`) | Node 22 (`npm start`) or the `Dockerfile` | Cloud Run, scales to zero |
+| **Storage** | Deno KV (managed) | Deno KV file (`KV_PATH`) | Firestore (`STORAGE=firestore`) |
+| **Token encryption** | AES-256-GCM, `ENCRYPTION_SECRET` | AES-256-GCM, `ENCRYPTION_SECRET` | Cloud KMS (`CIPHER=gcpkms`), key rotated every 90 days |
+| **Who can sign in** | Any Google account | Any Google account, or one domain (`ALLOWED_DOMAIN`) | One Workspace domain (Internal consent screen + `ALLOWED_DOMAIN`) |
+| **Set up with** | [Step 4](#deploy-to-deno-deploy) | [Step 4](#run-on-node--in-a-container) | [DEPLOY.md](DEPLOY.md) (Terraform in `infra/`) |
+| **Operate with** | Deno Deploy dashboard | [MAINTAIN.md](MAINTAIN.md) | [MAINTAIN.md](MAINTAIN.md), incl. `npm run revoke` |
+
+Every setting beyond the original ones is optional: with only the variables in
+the [reference](#environment-variables-reference) set, the server behaves as it
+always has on Deno Deploy.
 
 ## For End Users: Using the Hosted Server
 
@@ -133,7 +153,7 @@ Want to run your own instance? Here's how to deploy this MCP server yourself.
 ### Prerequisites
 
 1. [Node.js](https://nodejs.org/) 18+ and npm installed
-2. [Deno CLI](https://deno.land/) installed for deployment
+2. [Deno CLI](https://deno.land/) installed, for Deno Deploy only
 3. A [Google Cloud Platform](https://console.cloud.google.com/) account
 
 ### Step 1: Create Google Cloud Project
@@ -152,7 +172,8 @@ Want to run your own instance? Here's how to deploy this MCP server yourself.
    - Note your **Client ID** and **Client Secret**
 5. Configure OAuth consent screen:
    - Go to **APIs & Services** → **OAuth consent screen**
-   - Add required scopes: `https://www.googleapis.com/auth/tasks`
+   - Add required scopes: `openid`, `email`, `https://www.googleapis.com/auth/tasks`
+   - For a Workspace-only server, set the user type to **Internal**
 
 ### Step 2: Clone and Setup
 
@@ -187,8 +208,11 @@ cp .env.example .env
 # Build the project
 npm run build
 
-# Run with Deno
+# Run with Deno (deno serve on port 3000)
 deno task dev
+
+# ...or on Node (KV_PATH keeps sessions across restarts)
+KV_PATH=./data/kv.sqlite npm start
 ```
 
 Make sure your redirect URI in the .env file matches the publicly accessible URL pointing to your local server.
@@ -216,6 +240,23 @@ deployctl deploy --project=google-tasks-mcp build/index.js
    - Add all required environment variables
    - Restart the deployment
 
+#### Run on Node / in a container
+
+```bash
+npm run build
+KV_PATH=./data/kv.sqlite npm start   # serves build/node.js on $PORT
+```
+
+Set `KV_PATH` on Node: without it Deno KV is **in memory** and every restart
+logs everyone out. A `Dockerfile` is included.
+
+#### Deploy to Google Cloud (Cloud Run + Firestore + KMS)
+
+For a shared, multi-user server restricted to a Google Workspace domain, see
+[DEPLOY.md](DEPLOY.md) (Terraform in `infra/`) and [MAINTAIN.md](MAINTAIN.md)
+(configuration, token model, revoking access). All new settings are optional;
+without them the server behaves as before.
+
 ### Step 5: Update Google OAuth Settings
 
 Go back to your Google Cloud Console OAuth client and update the redirect URI to match your deployed URL:
@@ -238,7 +279,7 @@ Go back to your Google Cloud Console OAuth client and update the redirect URI to
 
 Configure your MCP client with the following connection details:
 - **Server URL**: `https://your-domain.com`
-- **Transport**: Server-Sent Events (SSE)
+- **Transport**: Streamable HTTP (stateless, JSON responses)
 - **Endpoint**: `/mcp`
 - **Authentication**: OAuth 2.0
 - **Discovery URL**: `/.well-known/oauth-authorization-server`
@@ -254,12 +295,24 @@ Configure your MCP client with the following connection details:
 | `PORT` | No | Server port (default: 3000) |
 | `LOG_LEVEL` | No | Logging level: trace, debug, info, warn, error (default: info) |
 | `ALLOWED_ORIGINS` | No | Comma-separated list of allowed CORS origins for browser clients |
+| `KV_PATH` | No | Deno KV file on Node; unset means in memory (everyone is logged out on restart) |
+| `ISSUER_URL` | No | Public base URL; set it behind a proxy or load balancer |
+| `ALLOWED_DOMAIN` | No | Only accept accounts from this Google Workspace domain |
+| `ALLOWED_REDIRECT_URIS` | No | Allowlist of client redirect URIs; set it on shared servers |
+| `PUBLIC_PAGES` | No | `true` (HTML pages), `false` (JSON only) or `auto` (HTML for browsers, JSON otherwise) |
+| `ANALYTICS`, `PRIVACY_POLICY_URL` | No | Drop the pages' analytics tag; redirect `/privacy-policy` to your own policy |
+| `STORAGE`, `CIPHER` | No | `firestore` and `gcpkms` for the Google Cloud mode (see [MAINTAIN.md](MAINTAIN.md)) |
+
+The full list, including the Google Cloud settings, is in [MAINTAIN.md](MAINTAIN.md#configuration).
 
 ### Development Commands
 
 ```bash
 npm run build            # Compile TypeScript to JavaScript
 npm run dev              # Watch mode - recompile on changes
+npm test                 # Run the test suite (vitest)
+npm start                # Serve build/node.js on Node
+npm run revoke -- --email <addr> --dry-run  # Kill switch (see MAINTAIN.md)
 npm run generate-secret  # Generate encryption secret for ENCRYPTION_SECRET env variable
 ```
 
@@ -267,20 +320,27 @@ npm run generate-secret  # Generate encryption secret for ENCRYPTION_SECRET env 
 
 ```
 src/
-├── auth/              # OAuth 2.0 authentication & token storage
-├── server/            # Hono app, MCP endpoints, middleware
+├── auth/              # OAuth 2.0 authorization server & token storage
+├── server/            # Hono app, MCP endpoint, middleware, rate limiting
 ├── tools/             # MCP tools for Google Tasks API (tasklists, tasks)
-├── transport/         # Custom SSE transport for MCP
-├── google/            # Google Tasks API client
-├── utils/             # Logger and encryption utilities
-└── index.ts           # Main entry point
+├── google/            # Google Tasks API client and Google OAuth
+├── store/             # Storage backends: Deno KV, Firestore
+├── crypto/            # Token encryption: static key, Cloud KMS
+├── cli/               # revoke command
+├── utils/             # Logger and timestamp helpers
+├── config.ts          # Environment → validated config
+├── deps.ts            # Wires store, cipher, clock and fetch
+├── index.ts           # Deno Deploy entry point
+└── node.ts            # Node entry point
+infra/                 # Terraform for the Google Cloud mode
 ```
 
 ## Security Features
 
 ### Token Encryption
 
-All Google access and refresh tokens are encrypted at rest using **AES-256-GCM**:
+All Google access and refresh tokens are encrypted at rest, using **AES-256-GCM**
+with `ENCRYPTION_SECRET` (below) or, in the Google Cloud mode, **Cloud KMS**:
 
 - **Algorithm**: AES-256-GCM (authenticated encryption)
 - **Key Derivation**: PBKDF2 with 100,000 iterations

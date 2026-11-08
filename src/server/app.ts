@@ -1,23 +1,25 @@
-import process from "node:process";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import { readFile } from "node:fs/promises";
 import { createOAuthRouter } from "../auth/oauth.ts";
+import { createTokenStore } from "../auth/token-store.ts";
+import { createGoogleTokenProvider } from "../google/client.ts";
+import type { AppDeps } from "../deps.ts";
 import { authenticateBearer } from "./middleware.ts";
-import { handleMcpGet, handleMcpPost } from "./mcp-endpoints.ts";
+import { issuer, MCP_PATH, PRM_PATH } from "../auth/issuer.ts";
+import { BackendUnavailableError } from "../store/store.ts";
+import { createLogger } from "../utils/logger.ts";
 
-export interface ServerConfig {
-  oauthConfig: {
-    clientId: string;
-    clientSecret: string;
-    redirectUri: string;
-  };
-}
+const logger = createLogger({ component: "app" });
+import { handleMcpMethodNotAllowed, handleMcpPost } from "./mcp-endpoints.ts";
 
-const MCP_ENDPOINT = "/mcp";
+const MCP_ENDPOINT = MCP_PATH;
 
-export function createApp(config: ServerConfig) {
+export function createApp(deps: AppDeps) {
   const app = new Hono();
+  const tokenStore = createTokenStore(deps);
+  const google = createGoogleTokenProvider(deps, tokenStore);
+  const requireBearer = authenticateBearer(deps, tokenStore, google);
 
   app.use("*", async (c, next) => {
     await next();
@@ -47,31 +49,45 @@ export function createApp(config: ServerConfig) {
         return origin;
       }
 
-      const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',').map(o => o.trim()) || [];
+      const allowedOrigins = deps.config.allowedOrigins;
       if (allowedOrigins.includes(origin)) {
         return origin;
       }
 
       return null;
     },
-    allowMethods: ["GET", "POST", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization", "Mcp-Session-Id", "Accept"],
+    allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization", "Mcp-Session-Id", "Mcp-Protocol-Version", "Accept"],
     exposeHeaders: ["Mcp-Session-Id", "Content-Type"],
     credentials: false,
     maxAge: 86400,
   }));
 
+  const { publicPages, analytics, privacyPolicyUrl } = deps.config;
+  const pageCsp = analytics
+    ? "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline' https://www.googletagmanager.com; connect-src https://www.google-analytics.com; frame-ancestors 'none'"
+    : "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-ancestors 'none'";
+  // PUBLIC_PAGES=auto serves the HTML pages only to clients that ask for HTML.
+  const wantsHtml = (c: Context) =>
+    publicPages === true || (publicPages === "auto" && (c.req.header("accept") ?? "").includes("text/html"));
+  const page = async (c: Context, file: string) => {
+    const html = await readFile(file, "utf-8");
+    c.header("Content-Security-Policy", pageCsp);
+    return c.html(analytics ? html : stripAnalytics(html));
+  };
+
   app.get("/", async (c) => {
+    if (!wantsHtml(c)) {
+      return c.json({ message: "Google Tasks MCP Server" });
+    }
     try {
-      const html = await readFile("./public/index.html", "utf-8");
-      c.header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline' https://www.googletagmanager.com; connect-src https://www.google-analytics.com; frame-ancestors 'none'");
-      return c.html(html);
+      return await page(c, "./public/index.html");
     } catch {
       return c.json({ message: "Google Tasks MCP Server" });
     }
   });
 
-  app.route("/", createOAuthRouter(config.oauthConfig));
+  app.route("/", createOAuthRouter(deps, tokenStore));
 
   app.get("/auth/callback", (c) => {
     const url = new URL(c.req.url);
@@ -79,11 +95,24 @@ export function createApp(config: ServerConfig) {
     return c.redirect(url.toString());
   });
 
-  app.get(MCP_ENDPOINT, authenticateBearer, handleMcpGet);
-  app.post(MCP_ENDPOINT, authenticateBearer, handleMcpPost);
+  app.post(MCP_ENDPOINT, requireBearer, handleMcpPost(deps, google));
+  app.get(MCP_ENDPOINT, requireBearer, handleMcpMethodNotAllowed);
+  app.delete(MCP_ENDPOINT, requireBearer, handleMcpMethodNotAllowed);
+
+  // Protected-resource metadata, at the origin and at the /mcp path suffix.
+  const protectedResource = (c: Context) => {
+    const base = issuer(deps, c.req.raw);
+    return c.json({
+      resource: `${base}${MCP_ENDPOINT}`,
+      authorization_servers: [base],
+      bearer_methods_supported: ["header"],
+    });
+  };
+  app.get(PRM_PATH, protectedResource);
+  app.get(`${PRM_PATH}${MCP_ENDPOINT}`, protectedResource);
 
   app.get("/.well-known/oauth-authorization-server", (c) => {
-    const baseUrl = new URL(c.req.url).origin;
+    const baseUrl = issuer(deps, c.req.raw);
     return c.json({
       issuer: baseUrl,
       authorization_endpoint: `${baseUrl}/authorize`,
@@ -107,27 +136,36 @@ export function createApp(config: ServerConfig) {
   });
 
   app.get("/privacy-policy", async (c) => {
+    if (privacyPolicyUrl) {
+      return c.redirect(privacyPolicyUrl);
+    }
+    if (!wantsHtml(c)) {
+      return c.notFound();
+    }
     try {
-      const html = await readFile("./public/privacy-policy.html", "utf-8");
-      c.header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline' https://www.googletagmanager.com; connect-src https://www.google-analytics.com; frame-ancestors 'none'");
-      return c.html(html);
+      return await page(c, "./public/privacy-policy.html");
     } catch {
       return c.notFound();
     }
   });
 
   app.get("/health", async (c) => {
+    if (!wantsHtml(c)) {
+      return c.json({ status: "ok" });
+    }
     try {
-      const html = await readFile("./public/health.html", "utf-8");
-      c.header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline' https://www.googletagmanager.com; connect-src https://www.google-analytics.com; frame-ancestors 'none'");
-      return c.html(html);
+      return await page(c, "./public/health.html");
     } catch {
       return c.json({ status: "ok" });
     }
   });
 
   app.onError((err, c) => {
-    console.error("Unhandled error:", err);
+    if (err instanceof BackendUnavailableError) {
+      logger.error("Backend unavailable", { backend: err.message });
+      return c.json({ error: "temporarily_unavailable", error_description: "Service temporarily unavailable. Please retry." }, 503);
+    }
+    logger.error("Unhandled error", { error: String(err) });
     return c.json({
       error: "internal_server_error",
       error_description: "An internal server error occurred. Please try again later."
@@ -135,4 +173,11 @@ export function createApp(config: ServerConfig) {
   });
 
   return app;
+}
+
+/** Drops the pages' Google Analytics tag (ANALYTICS=false). */
+export function stripAnalytics(html: string): string {
+  return html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, (tag) => (/googletagmanager|gtag\(/.test(tag) ? "" : tag))
+    .replace(/<!--\s*Google tag \(gtag\.js\)\s*-->/g, "");
 }

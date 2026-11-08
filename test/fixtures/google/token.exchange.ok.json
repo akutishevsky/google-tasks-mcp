@@ -1,0 +1,18 @@
+{
+  "_provenance": "docs",
+  "request": {
+    "method": "POST",
+    "path": "/token"
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "access_token": "PLANTED_GOOGLE_ACCESS_A",
+      "expires_in": 3599,
+      "refresh_token": "PLANTED_GOOGLE_REFRESH_A",
+      "scope": "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/tasks",
+      "token_type": "Bearer",
+      "id_token": "eyJhbGciOiJSUzI1NiIsImtpZCI6InBsYW50ZWQiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2FjY291bnRzLmdvb2dsZS5jb20iLCJhdWQiOiJwbGFudGVkLWNsaWVudC1pZCIsInN1YiI6IjEwMDAwMDAwMDAwMDAwMDAwMDAwMSIsImlhdCI6MTc5MjE5NTIwMCwiZXhwIjoxNzkyMTk4ODAwLCJlbWFpbCI6ImFAZXhhbXBsZS5jb20iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwiaGQiOiJleGFtcGxlLmNvbSJ9.planted-signature"
+    }
+  }
+}

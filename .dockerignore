@@ -1,0 +1,13 @@
+node_modules
+build
+test
+scripts
+docs
+infra
+.git
+.claude
+.superpowers
+*.md
+*.log
+.env
+client_secret_*.json

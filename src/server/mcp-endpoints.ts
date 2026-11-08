@@ -1,135 +1,63 @@
 import { Context } from "hono";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
-import { HonoSSETransport } from "../transport/mcp-transport.ts";
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { registerAllTools } from "../tools/index.ts";
+import type { AppDeps } from "../deps.ts";
+import type { GoogleTokenProvider } from "../google/client.ts";
 import { createLogger } from "../utils/logger.ts";
 
 const logger = createLogger({ component: "mcp-endpoints" });
 
-export function handleMcpGet(c: Context) {
-  const { readable, writable } = new TransformStream();
-  const writer = writable.getWriter();
-  const encoder = new TextEncoder();
+/**
+ * POST /mcp: stateless Streamable HTTP. Each request gets its own server and
+ * transport, so any instance can serve any request (no sessions, no SSE).
+ */
+export const handleMcpPost = (_deps: AppDeps, google: GoogleTokenProvider) => async (c: Context) => {
+  const grantId = c.get("grantId") as string;
 
-  const heartbeat = setInterval(() => {
-    writer.write(encoder.encode(": ping\n\n")).catch(() => {
-      clearInterval(heartbeat);
-    });
-  }, 15000);
+  const server = new McpServer(
+    {
+      name: "google-tasks-mcp",
+      version: "1.0.0",
+    },
+    {
+      capabilities: {
+        tools: {},
+      },
+    },
+  );
+  registerAllTools(server, google.clientFor(grantId));
 
-  c.req.raw.signal.addEventListener("abort", () => {
-    clearInterval(heartbeat);
-    writer.close().catch(() => {});
+  const transport = new WebStandardStreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true,
   });
+  // The transport answers bad requests (e.g. an unsupported protocol version)
+  // with a 400 and reports why only here.
+  transport.onerror = (error) => logger.warn("MCP request rejected", { reason: String(error) });
 
-  const headers = {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    "Connection": "keep-alive",
-    "X-Accel-Buffering": "no",
-  };
-
-  return new Response(readable, { headers });
-}
-
-export async function handleMcpPost(c: Context) {
-  const mcpToken = c.get("mcpToken") as string;
-
-  let message: JSONRPCMessage;
   try {
-    message = await c.req.json() as JSONRPCMessage;
-  } catch {
-    logger.error("Failed to parse incoming MCP message");
-    return c.json({
-      error: "invalid_request",
-      error_description: "Request body is not valid JSON",
-    }, 400);
+    await server.connect(transport);
+    return await transport.handleRequest(c.req.raw);
+  } catch (error) {
+    logger.error("Failed to handle MCP request", { error: String(error) });
+    throw error;
+  } finally {
+    // JSON responses are complete once handleRequest resolves.
+    await transport.close().catch(() => {});
+    await server.close().catch(() => {});
   }
+};
 
-  const { readable, writable } = new TransformStream();
-  const writer = writable.getWriter();
-  const encoder = new TextEncoder();
-  let streamClosed = false;
-
-  const closeStream = () => {
-    if (streamClosed) {
-      return;
-    }
-    streamClosed = true;
-    writer.close().catch(() => {});
-  };
-
-  const writeSSE = async (data: string, event?: string) => {
-    if (streamClosed) {
-      return;
-    }
-    try {
-      if (event) {
-        await writer.write(encoder.encode(`event: ${event}\n`));
-      }
-      await writer.write(encoder.encode(`data: ${data}\n\n`));
-    } catch {
-      // Silently handle write errors (e.g. client disconnected)
-    }
-  };
-
-  const transport = new HonoSSETransport();
-  transport.attachStream({
-    writeSSE: async (data: { data: string; event?: string; id?: string }) => {
-      await writeSSE(data.data, data.event);
-      closeStream();
+/** GET/DELETE /mcp: no server-initiated streams or sessions in stateless mode. */
+export function handleMcpMethodNotAllowed(c: Context) {
+  return c.json(
+    {
+      jsonrpc: "2.0",
+      error: { code: -32000, message: "Method not allowed." },
+      id: null,
     },
-    close: () => {
-      closeStream();
-    },
-  });
-
-  (async () => {
-    try {
-      const sessionServer = new McpServer(
-        {
-          name: "google-tasks-mcp",
-          version: "1.0.0",
-        },
-        {
-          capabilities: {
-            tools: {},
-          },
-        },
-      );
-
-      registerAllTools(sessionServer, mcpToken);
-
-      await sessionServer.connect(transport);
-      logger.info("MCP request handled statelessly via POST");
-
-      await transport.handleIncomingMessage(message);
-
-      // The stream is normally closed as soon as the response is written
-      // (see writeSSE in attachStream). This timer is only a safety backstop
-      // for messages that never produce a response (e.g. notifications), so it
-      // must be well above the slowest expected tool round-trip — a short
-      // cutoff here would truncate any response slower than the timeout.
-      setTimeout(() => {
-        closeStream();
-      }, 30000);
-    } catch {
-      logger.error("Failed to handle MCP message via POST");
-      closeStream();
-    }
-  })();
-
-  c.req.raw.signal.addEventListener("abort", () => {
-    closeStream();
-  });
-
-  const headers = {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    "Connection": "keep-alive",
-    "X-Accel-Buffering": "no",
-  };
-
-  return new Response(readable, { headers });
+    405,
+    { Allow: "POST" },
+  );
 }

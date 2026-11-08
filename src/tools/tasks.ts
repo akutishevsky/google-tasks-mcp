@@ -1,3 +1,4 @@
+import type { GoogleClient } from "../google/client.ts";
 import { z } from "zod";
 import {
   listTasks,
@@ -14,7 +15,7 @@ import { addReadableTimestamps } from "../utils/timestamp.ts";
 
 const logger = createLogger({ component: "tools:tasks" });
 
-export function registerTasksTools(server: any, mcpAccessToken: string) {
+export function registerTasksTools(server: any, client: GoogleClient) {
   server.registerTool(
     "list_tasks",
     {
@@ -67,7 +68,7 @@ export function registerTasksTools(server: any, mcpAccessToken: string) {
       logger.info("Tool invoked: list_tasks");
       try {
         const { taskListId, dueMin, dueMax, showCompleted, showHidden, ...options } = args;
-        const result = await listTasks(mcpAccessToken, taskListId, { dueMin, dueMax, showCompleted, showHidden, ...options });
+        const result = await listTasks(client, taskListId, { dueMin, dueMax, showCompleted, showHidden, ...options });
         const processedData = addReadableTimestamps(result);
 
         let responseText = JSON.stringify(processedData, null, 2);
@@ -123,7 +124,7 @@ export function registerTasksTools(server: any, mcpAccessToken: string) {
       const { taskListId, taskId } = args;
       logger.info("Tool invoked: get_task");
       try {
-        const result = await getTask(mcpAccessToken, taskListId, taskId);
+        const result = await getTask(client, taskListId, taskId);
         const processedData = addReadableTimestamps(result);
 
         return {
@@ -175,7 +176,7 @@ export function registerTasksTools(server: any, mcpAccessToken: string) {
       logger.info("Tool invoked: insert_task");
       try {
         const { taskListId, parent, previous, ...task } = args;
-        const result = await insertTask(mcpAccessToken, taskListId, task, parent, previous);
+        const result = await insertTask(client, taskListId, task, parent, previous);
         const processedData = addReadableTimestamps(result);
 
         return {
@@ -228,7 +229,7 @@ export function registerTasksTools(server: any, mcpAccessToken: string) {
       logger.info("Tool invoked: update_task");
       try {
         const { taskListId, taskId, ...task } = args;
-        const result = await updateTask(mcpAccessToken, taskListId, taskId, task);
+        const result = await updateTask(client, taskListId, taskId, task);
         const processedData = addReadableTimestamps(result);
 
         return {
@@ -281,7 +282,7 @@ export function registerTasksTools(server: any, mcpAccessToken: string) {
       logger.info("Tool invoked: patch_task");
       try {
         const { taskListId, taskId, ...updates } = args;
-        const result = await patchTask(mcpAccessToken, taskListId, taskId, updates);
+        const result = await patchTask(client, taskListId, taskId, updates);
         const processedData = addReadableTimestamps(result);
 
         return {
@@ -320,7 +321,7 @@ export function registerTasksTools(server: any, mcpAccessToken: string) {
       const { taskListId, taskId } = args;
       logger.info("Tool invoked: delete_task");
       try {
-        await deleteTask(mcpAccessToken, taskListId, taskId);
+        await deleteTask(client, taskListId, taskId);
 
         return {
           content: [
@@ -357,7 +358,7 @@ export function registerTasksTools(server: any, mcpAccessToken: string) {
       const { taskListId } = args;
       logger.info("Tool invoked: clear_completed_tasks");
       try {
-        await clearTasks(mcpAccessToken, taskListId);
+        await clearTasks(client, taskListId);
 
         return {
           content: [
@@ -403,7 +404,7 @@ export function registerTasksTools(server: any, mcpAccessToken: string) {
       const { taskListId, taskId, parent, previous } = args;
       logger.info("Tool invoked: move_task");
       try {
-        const result = await moveTask(mcpAccessToken, taskListId, taskId, parent, previous);
+        const result = await moveTask(client, taskListId, taskId, parent, previous);
         const processedData = addReadableTimestamps(result);
 
         return {

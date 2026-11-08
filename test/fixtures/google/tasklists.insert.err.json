@@ -1,0 +1,24 @@
+{
+  "_provenance": "docs",
+  "request": {
+    "method": "POST",
+    "path": "/tasks/v1/users/@me/lists"
+  },
+  "response": {
+    "status": 400,
+    "body": {
+      "error": {
+        "code": 400,
+        "message": "Invalid Value",
+        "errors": [
+          {
+            "message": "Invalid Value",
+            "domain": "global",
+            "reason": "invalid"
+          }
+        ],
+        "status": "INVALID_ARGUMENT"
+      }
+    }
+  }
+}

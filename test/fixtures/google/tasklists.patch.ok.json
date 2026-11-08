@@ -1,0 +1,18 @@
+{
+  "_provenance": "docs",
+  "request": {
+    "method": "PATCH",
+    "path": "/tasks/v1/users/@me/lists/{tasklist}"
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "kind": "tasks#taskList",
+      "id": "PLANTED_LIST_1",
+      "etag": "\"PLANTED_ETAG\"",
+      "title": "Patched",
+      "updated": "2026-10-16T09:30:00.000Z",
+      "selfLink": "https://www.googleapis.com/tasks/v1/users/@me/lists/PLANTED_LIST_1"
+    }
+  }
+}

@@ -1,70 +1,50 @@
-import { openKv } from "@deno/kv";
 import { Context, Next } from "hono";
-
-let kv: Awaited<ReturnType<typeof openKv>> | null = null;
-
-export async function initRateLimiter() {
-  kv = await openKv();
-}
+import type { AppDeps } from "../deps.ts";
 
 interface RateLimitConfig {
   maxRequests: number;
   windowMs: number;
 }
 
-export function rateLimit(config: RateLimitConfig) {
-  return async (c: Context, next: Next) => {
-    if (!kv) {
-      await next();
-      return;
-    }
+/**
+ * The client address for rate limiting. Without `hops` this is upstream's
+ * behaviour (whole X-Forwarded-For value, which the client controls). With
+ * TRUST_PROXY_HOPS=n, the n-th entry from the right: the address our n
+ * trusted proxies saw (Cloud Run: 1).
+ */
+export function clientIp(headers: Headers, hops?: number): string {
+  const xff = headers.get("x-forwarded-for");
+  if (hops === undefined) {
+    return xff || headers.get("x-real-ip") || "unknown";
+  }
+  const entries = (xff ?? "").split(",").map((e) => e.trim()).filter(Boolean);
+  if (entries.length === 0) return headers.get("x-real-ip") || "unknown";
+  return entries[Math.max(0, entries.length - hops)];
+}
 
-    const ip = c.req.header("x-forwarded-for") || c.req.header("x-real-ip") || "unknown";
+export function rateLimit(deps: Pick<AppDeps, "store" | "clock" | "config">, config: RateLimitConfig) {
+  const { store, clock } = deps;
+  return async (c: Context, next: Next) => {
+    const ip = clientIp(c.req.raw.headers, deps.config.trustProxyHops);
     const key = ["rate_limit", c.req.path, ip];
 
-    const now = Date.now();
+    const now = clock();
 
-    const entry = await kv.get<{ count: number; resetAt: number }>(key);
+    const entry = await store.get<{ count: number; resetAt: number }>(key);
 
-    if (entry.value) {
-      if (entry.value.resetAt > now) {
-        if (entry.value.count >= config.maxRequests) {
-          return c.json(
-            {
-              error: "rate_limit_exceeded",
-              error_description: "Too many requests. Please try again later.",
-            },
-            429
-          );
-        }
-
-        await kv.set(
-          key,
+    if (entry && entry.resetAt > now) {
+      if (entry.count >= config.maxRequests) {
+        return c.json(
           {
-            count: entry.value.count + 1,
-            resetAt: entry.value.resetAt,
+            error: "rate_limit_exceeded",
+            error_description: "Too many requests. Please try again later.",
           },
-          { expireIn: config.windowMs }
-        );
-      } else {
-        await kv.set(
-          key,
-          {
-            count: 1,
-            resetAt: now + config.windowMs,
-          },
-          { expireIn: config.windowMs }
+          429
         );
       }
+      await store.set(key, { count: entry.count + 1, resetAt: entry.resetAt }, { ttlMs: config.windowMs });
     } else {
-      await kv.set(
-        key,
-        {
-          count: 1,
-          resetAt: now + config.windowMs,
-        },
-        { expireIn: config.windowMs }
-      );
+      await store.set(key, { count: 1, resetAt: now + config.windowMs }, { ttlMs: config.windowMs });
     }
 
     await next();

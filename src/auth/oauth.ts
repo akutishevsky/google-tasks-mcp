@@ -1,138 +1,68 @@
-import { Buffer } from "node:buffer";
 import { Hono } from "hono";
-import { tokenStore } from "./token-store.ts";
 import crypto from "node:crypto";
-import { openKv } from "@deno/kv";
+import type { AppDeps } from "../deps.ts";
+import { createOAuthStore } from "./oauth-store.ts";
+import { exchangeCode } from "../google/oauth.ts";
+import { parseIdToken } from "./id-token.ts";
+import { pkceS256, randomToken } from "./tokens.ts";
+import { isAllowedRedirectUri, isValidRedirectUri } from "./redirect-uris.ts";
+import { ACCESS_TTL_MS } from "./token-store.ts";
+import type { TokenStore } from "./token-store.ts";
 import { createLogger } from "../utils/logger.ts";
 import { rateLimit } from "../server/rate-limiter.ts";
 
 const logger = createLogger({ component: "oauth" });
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
-const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 
-export interface OAuthConfig {
-  clientId: string;
-  clientSecret: string;
-  redirectUri: string;
-}
+const GOOGLE_SCOPE = "openid email https://www.googleapis.com/auth/tasks";
 
-interface OAuthSession {
-  state: string;
-  codeChallenge?: string;
-  codeChallengeMethod?: string;
-  redirectUri: string;
-  clientId?: string;
-}
-
-interface AuthCode {
-  googleCode: string;
-  clientId?: string;
-  redirectUri: string;
-  codeChallenge?: string;
-}
-
-interface RegisteredClient {
-  clientId: string;
-  clientSecret?: string;
-  redirectUris: string[];
-}
-
-class OAuthStore {
-  private kv: Awaited<ReturnType<typeof openKv>> | null = null;
-
-  async init() {
-    this.kv = await openKv();
-  }
-
-  async storeSession(sessionId: string, session: OAuthSession): Promise<void> {
-    if (!this.kv) throw new Error("KV not initialized");
-    await this.kv.set(["oauth_sessions", sessionId], session, { expireIn: 600000 });
-  }
-
-  async getSession(sessionId: string): Promise<OAuthSession | null> {
-    if (!this.kv) throw new Error("KV not initialized");
-    const result = await this.kv.get<OAuthSession>(["oauth_sessions", sessionId]);
-    return result.value;
-  }
-
-  async deleteSession(sessionId: string): Promise<void> {
-    if (!this.kv) throw new Error("KV not initialized");
-    await this.kv.delete(["oauth_sessions", sessionId]);
-  }
-
-  async storeAuthCode(code: string, data: AuthCode): Promise<void> {
-    if (!this.kv) throw new Error("KV not initialized");
-    await this.kv.set(["auth_codes", code], data, { expireIn: 600000 });
-  }
-
-  async getAuthCode(code: string): Promise<AuthCode | null> {
-    if (!this.kv) throw new Error("KV not initialized");
-    const result = await this.kv.get<AuthCode>(["auth_codes", code]);
-    return result.value;
-  }
-
-  async deleteAuthCode(code: string): Promise<void> {
-    if (!this.kv) throw new Error("KV not initialized");
-    await this.kv.delete(["auth_codes", code]);
-  }
-
-  async registerClient(clientId: string, client: RegisteredClient): Promise<void> {
-    if (!this.kv) throw new Error("KV not initialized");
-    await this.kv.set(["clients", clientId], client);
-  }
-
-  async getClient(clientId: string): Promise<RegisteredClient | null> {
-    if (!this.kv) throw new Error("KV not initialized");
-    const result = await this.kv.get<RegisteredClient>(["clients", clientId]);
-    return result.value;
-  }
-}
-
-const oauthStore = new OAuthStore();
-
-function base64URLEncode(str: Buffer): string {
-  return str.toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=/g, '');
-}
-
-function sha256(buffer: string): Buffer {
-  return crypto.createHash('sha256').update(buffer).digest();
-}
-
-export async function initOAuthStore() {
-  await oauthStore.init();
-}
-
-export function createOAuthRouter(config: OAuthConfig) {
+export function createOAuthRouter(deps: AppDeps, tokenStore: TokenStore) {
+  const config = deps.config.google;
+  const oauthStore = createOAuthStore(deps);
   const oauth = new Hono();
 
   oauth.post(
     "/register",
-    rateLimit({ maxRequests: 30, windowMs: 3600000 }),
+    rateLimit(deps, { maxRequests: 30, windowMs: 3600000 }),
     async (c) => {
-      const body = await c.req.json();
-      const clientId = crypto.randomUUID();
+      let body: { redirect_uris?: unknown } | null = null;
+      try {
+        body = await c.req.json();
+      } catch {
+        // falls through to invalid_client_metadata
+      }
+      const uris = body?.redirect_uris;
+      if (!Array.isArray(uris) || uris.length === 0 || !uris.every(isValidRedirectUri)) {
+        logger.warn("Client registration rejected: invalid redirect_uris");
+        return c.json(
+          {
+            error: "invalid_client_metadata",
+            error_description: "redirect_uris must be a non-empty array of https or loopback http URIs",
+          },
+          400,
+        );
+      }
+      if (!uris.every((u) => isAllowedRedirectUri(u, deps.config.allowedRedirectUris))) {
+        logger.warn("Client registration rejected: redirect_uri not allowed by this server");
+        return c.json({ error: "invalid_redirect_uri", error_description: "redirect_uri is not allowed by this server" }, 400);
+      }
 
-      await oauthStore.registerClient(clientId, {
-        clientId,
-        redirectUris: body.redirect_uris || [],
-      });
+      const clientId = crypto.randomUUID();
+      await oauthStore.registerClient(clientId, { clientId, redirectUris: uris });
 
       logger.info("OAuth client registered");
 
       return c.json({
         client_id: clientId,
-        redirect_uris: body.redirect_uris || [],
+        redirect_uris: uris,
       });
     }
   );
 
   oauth.get(
     "/authorize",
-    rateLimit({ maxRequests: 60, windowMs: 3600000 }),
+    rateLimit(deps, { maxRequests: 60, windowMs: 3600000 }),
     async (c) => {
     const responseType = c.req.query("response_type");
     const clientId = c.req.query("client_id");
@@ -146,9 +76,31 @@ export function createOAuthRouter(config: OAuthConfig) {
       return c.json({ error: "unsupported_response_type" }, 400);
     }
 
+    // Never redirect to a URI the client did not register: answer 400 here.
+    const client = clientId ? await oauthStore.getClient(clientId) : null;
+    if (!client) {
+      logger.warn("OAuth authorization failed: unknown client_id");
+      return c.json({ error: "invalid_client", error_description: "Unknown client_id" }, 400);
+    }
+
     if (!redirectUri) {
       logger.warn("OAuth authorization failed: missing redirect_uri");
       return c.json({ error: "invalid_request", error_description: "redirect_uri is required" }, 400);
+    }
+
+    if (
+      !Array.isArray(client.redirectUris) ||
+      !client.redirectUris.includes(redirectUri) ||
+      !isAllowedRedirectUri(redirectUri, deps.config.allowedRedirectUris)
+    ) {
+      logger.warn("OAuth authorization failed: redirect_uri not registered for client");
+      return c.json({ error: "invalid_request", error_description: "redirect_uri is not registered for this client" }, 400);
+    }
+
+    // PKCE is mandatory (OAuth 2.1, MCP authorization): S256 only.
+    if (!codeChallenge || codeChallengeMethod !== "S256") {
+      logger.warn("OAuth authorization failed: PKCE S256 required");
+      return c.json({ error: "invalid_request", error_description: "code_challenge with code_challenge_method=S256 is required" }, 400);
     }
 
     if (!state) {
@@ -172,10 +124,14 @@ export function createOAuthRouter(config: OAuthConfig) {
     googleAuthUrl.searchParams.append("response_type", "code");
     googleAuthUrl.searchParams.append("client_id", config.clientId);
     googleAuthUrl.searchParams.append("redirect_uri", config.redirectUri);
-    googleAuthUrl.searchParams.append("scope", "https://www.googleapis.com/auth/tasks");
+    googleAuthUrl.searchParams.append("scope", GOOGLE_SCOPE);
     googleAuthUrl.searchParams.append("state", internalState);
     googleAuthUrl.searchParams.append("access_type", "offline");
     googleAuthUrl.searchParams.append("prompt", "consent");
+    if (deps.config.allowedDomain) {
+      // A hint for Google's account chooser; /callback enforces the domain.
+      googleAuthUrl.searchParams.append("hd", deps.config.allowedDomain);
+    }
 
     return c.redirect(googleAuthUrl.toString());
     }
@@ -198,13 +154,31 @@ export function createOAuthRouter(config: OAuthConfig) {
 
     logger.info("Processing OAuth callback from Google");
 
-    const authCode = crypto.randomUUID();
+    // Exchange here, not at /token, so the id_token is available to check.
+    let google;
+    try {
+      google = await exchangeCode(deps, code);
+    } catch {
+      return c.json({ error: "server_error", error_description: "Failed to exchange the Google authorization code" }, 502);
+    }
+    const claims = parseIdToken(google.idToken);
+    const domain = deps.config.allowedDomain;
+    if (domain && (claims.hd !== domain || !claims.email_verified)) {
+      logger.warn("OAuth callback rejected: account outside the allowed domain");
+      await oauthStore.deleteSession(internalState);
+      return c.text("This Google account is not allowed to use this server.", 403);
+    }
+
+    const authCode = randomToken();
 
     await oauthStore.storeAuthCode(authCode, {
-      googleCode: code,
-      clientId: session.clientId,
+      clientId: session.clientId!,
       redirectUri: session.redirectUri,
       codeChallenge: session.codeChallenge,
+      email: claims.email,
+      encGoogleAccess: await deps.cipher.encrypt(google.accessToken),
+      encGoogleRefresh: await deps.cipher.encrypt(google.refreshToken),
+      googleExpiresAt: deps.clock() + google.expiresIn * 1000,
     });
 
     await oauthStore.deleteSession(internalState);
@@ -218,20 +192,40 @@ export function createOAuthRouter(config: OAuthConfig) {
 
   oauth.post(
     "/token",
-    rateLimit({ maxRequests: 100, windowMs: 3600000 }),
+    rateLimit(deps, { maxRequests: 100, windowMs: 3600000 }),
     async (c) => {
     const body = await c.req.parseBody();
     const grantType = body.grant_type;
-    const code = body.code as string;
-    const codeVerifier = body.code_verifier as string;
-    const redirectUri = body.redirect_uri as string;
+    const clientId = typeof body.client_id === "string" ? body.client_id : "";
+
+    const issued = (pair: { accessToken: string; refreshToken: string }) =>
+      c.json({
+        access_token: pair.accessToken,
+        token_type: "Bearer",
+        expires_in: ACCESS_TTL_MS / 1000,
+        refresh_token: pair.refreshToken,
+      });
+
+    if (grantType === "refresh_token") {
+      const refreshToken = typeof body.refresh_token === "string" ? body.refresh_token : "";
+      const result = refreshToken ? await tokenStore.rotateRefresh(refreshToken, clientId) : { error: "invalid_grant" as const };
+      if ("error" in result) {
+        logger.warn("Refresh failed: invalid_grant");
+        return c.json({ error: "invalid_grant" }, 400);
+      }
+      return issued(result);
+    }
 
     if (grantType !== "authorization_code") {
       logger.warn("Token exchange failed: unsupported grant type");
       return c.json({ error: "unsupported_grant_type" }, 400);
     }
 
-    const authCodeData = await oauthStore.getAuthCode(code);
+    const code = body.code as string;
+    const codeVerifier = body.code_verifier as string;
+    const redirectUri = body.redirect_uri as string;
+
+    const authCodeData = code ? await oauthStore.takeAuthCode(code) : null;
     if (!authCodeData) {
       logger.warn("Token exchange failed: invalid authorization code");
       return c.json({ error: "invalid_grant" }, 400);
@@ -244,105 +238,34 @@ export function createOAuthRouter(config: OAuthConfig) {
       return c.json({ error: "invalid_grant", error_description: "redirect_uri does not match authorization request" }, 400);
     }
 
+    if (clientId !== authCodeData.clientId) {
+      logger.warn("Token exchange failed: client_id mismatch");
+      return c.json({ error: "invalid_grant", error_description: "client_id does not match authorization request" }, 400);
+    }
+
     if (authCodeData.codeChallenge) {
       if (!codeVerifier) {
         logger.warn("PKCE validation failed: missing code_verifier");
         return c.json({ error: "invalid_request", error_description: "code_verifier required" }, 400);
       }
 
-      const hash = base64URLEncode(sha256(codeVerifier));
-      if (hash !== authCodeData.codeChallenge) {
+      if (pkceS256(codeVerifier) !== authCodeData.codeChallenge) {
         logger.warn("PKCE validation failed: invalid code_verifier");
         return c.json({ error: "invalid_grant", error_description: "invalid code_verifier" }, 400);
       }
     }
 
-    try {
-      const tokenResponse = await fetch(GOOGLE_TOKEN_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams({
-          code: authCodeData.googleCode,
-          client_id: config.clientId,
-          client_secret: config.clientSecret,
-          redirect_uri: config.redirectUri,
-          grant_type: "authorization_code",
-        }),
-      });
-
-      const tokenData = await tokenResponse.json();
-
-      if (!tokenResponse.ok) {
-        logger.error("Google token exchange failed", { status: tokenResponse.status });
-        return c.json({ error: "server_error", error_description: "Failed to exchange Google token" }, 500);
-      }
-
-      const mcpToken = crypto.randomUUID();
-
-      await tokenStore.storeTokens(mcpToken, {
-        googleAccessToken: tokenData.access_token,
-        googleRefreshToken: tokenData.refresh_token,
-        expiresAt: Date.now() + tokenData.expires_in * 1000,
-      });
-
-      await oauthStore.deleteAuthCode(code);
-
-      logger.info("Token exchange completed successfully");
-
-      const MCP_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
-
-      return c.json({
-        access_token: mcpToken,
-        token_type: "Bearer",
-        expires_in: MCP_TOKEN_TTL_SECONDS,
-      });
-    } catch (error) {
-      logger.error("Token exchange error", { error: String(error) });
-      return c.json({ error: "server_error", error_description: "Failed to exchange authorization code" }, 500);
-    }
+    const { grantId } = await tokenStore.createGrant({
+      email: authCodeData.email,
+      clientId: authCodeData.clientId,
+      encGoogleAccess: authCodeData.encGoogleAccess,
+      encGoogleRefresh: authCodeData.encGoogleRefresh,
+      googleExpiresAt: authCodeData.googleExpiresAt,
+    });
+    logger.info("Token exchange completed successfully");
+    return issued(await tokenStore.issuePair(grantId, authCodeData.clientId));
     }
   );
 
   return oauth;
-}
-
-export async function refreshGoogleToken(
-  refreshToken: string,
-  config: OAuthConfig
-): Promise<{
-  accessToken: string;
-  refreshToken: string;
-  expiresIn: number;
-}> {
-  logger.info("Refreshing Google access token");
-
-  const tokenResponse = await fetch(GOOGLE_TOKEN_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams({
-      refresh_token: refreshToken,
-      client_id: config.clientId,
-      client_secret: config.clientSecret,
-      grant_type: "refresh_token",
-    }),
-  });
-
-  const tokenData = await tokenResponse.json();
-
-  if (!tokenResponse.ok) {
-    logger.error("Google token refresh failed");
-    throw new Error(`Failed to refresh Google token: ${tokenData.error}`);
-  }
-
-  logger.info("Token refresh completed successfully");
-
-  return {
-    accessToken: tokenData.access_token,
-    refreshToken: tokenData.refresh_token || refreshToken,
-    expiresIn: tokenData.expires_in,
-  };
 }

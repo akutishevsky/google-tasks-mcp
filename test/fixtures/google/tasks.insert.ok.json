@@ -1,0 +1,23 @@
+{
+  "_provenance": "docs",
+  "request": {
+    "method": "POST",
+    "path": "/tasks/v1/lists/{tasklist}/tasks"
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "kind": "tasks#task",
+      "id": "PLANTED_TASK_3",
+      "etag": "\"PLANTED_ETAG\"",
+      "title": "Inserted",
+      "updated": "2026-10-16T09:30:00.000Z",
+      "selfLink": "https://www.googleapis.com/tasks/v1/lists/PLANTED_LIST_1/tasks/PLANTED_TASK_3",
+      "position": "00000000000000000003",
+      "status": "needsAction",
+      "due": "2026-10-20T00:00:00.000Z",
+      "links": [],
+      "webViewLink": "https://tasks.google.com/task/PLANTED_TASK_3"
+    }
+  }
+}

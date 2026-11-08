@@ -1,43 +1,18 @@
-import { tokenStore } from "../auth/token-store.ts";
-import { refreshGoogleToken } from "../auth/oauth.ts";
-import { getOAuthConfig } from "../config.ts";
+import type { GoogleClient } from "./client.ts";
 import { createLogger } from "../utils/logger.ts";
 
 const logger = createLogger({ component: "google-api" });
 
 const GOOGLE_TASKS_API_BASE = "https://tasks.googleapis.com/tasks/v1";
 
-async function getValidAccessToken(mcpToken: string): Promise<string> {
-  const tokenData = await tokenStore.getTokens(mcpToken);
-  if (!tokenData) {
-    throw new Error("Invalid or expired MCP token");
-  }
-
-  if (Date.now() >= tokenData.expiresAt - 60000) {
-    logger.info("Access token expired, refreshing");
-    const config = getOAuthConfig();
-    const refreshed = await refreshGoogleToken(tokenData.googleRefreshToken, config);
-
-    await tokenStore.updateTokens(mcpToken, {
-      googleAccessToken: refreshed.accessToken,
-      googleRefreshToken: refreshed.refreshToken,
-      expiresAt: Date.now() + refreshed.expiresIn * 1000,
-    });
-
-    return refreshed.accessToken;
-  }
-
-  return tokenData.googleAccessToken;
-}
-
 async function makeGoogleRequest(
-  mcpToken: string,
+  client: GoogleClient,
   endpoint: string,
   options?: RequestInit
 ): Promise<any> {
-  const accessToken = await getValidAccessToken(mcpToken);
+  const accessToken = await client.getAccessToken();
 
-  const response = await fetch(`${GOOGLE_TASKS_API_BASE}${endpoint}`, {
+  const response = await client.fetch(`${GOOGLE_TASKS_API_BASE}${endpoint}`, {
     ...options,
     headers: {
       ...options?.headers,
@@ -52,51 +27,53 @@ async function makeGoogleRequest(
     throw new Error(`Google API error: ${response.status} - ${error}`);
   }
 
-  return response.json();
+  // Deletes and clear return 204 with no body.
+  const text = await response.text();
+  return text ? JSON.parse(text) : null;
 }
 
-export function listTaskLists(mcpToken: string, maxResults?: number, pageToken?: string) {
+export function listTaskLists(client: GoogleClient, maxResults?: number, pageToken?: string) {
   const params = new URLSearchParams();
   if (maxResults) params.append("maxResults", maxResults.toString());
   if (pageToken) params.append("pageToken", pageToken);
 
   const query = params.toString() ? `?${params.toString()}` : "";
-  return makeGoogleRequest(mcpToken, `/users/@me/lists${query}`);
+  return makeGoogleRequest(client, `/users/@me/lists${query}`);
 }
 
-export function getTaskList(mcpToken: string, taskListId: string) {
-  return makeGoogleRequest(mcpToken, `/users/@me/lists/${taskListId}`);
+export function getTaskList(client: GoogleClient, taskListId: string) {
+  return makeGoogleRequest(client, `/users/@me/lists/${taskListId}`);
 }
 
-export function insertTaskList(mcpToken: string, title: string) {
-  return makeGoogleRequest(mcpToken, `/users/@me/lists`, {
+export function insertTaskList(client: GoogleClient, title: string) {
+  return makeGoogleRequest(client, `/users/@me/lists`, {
     method: "POST",
     body: JSON.stringify({ title }),
   });
 }
 
-export function updateTaskList(mcpToken: string, taskListId: string, title: string) {
-  return makeGoogleRequest(mcpToken, `/users/@me/lists/${taskListId}`, {
+export function updateTaskList(client: GoogleClient, taskListId: string, title: string) {
+  return makeGoogleRequest(client, `/users/@me/lists/${taskListId}`, {
     method: "PUT",
     body: JSON.stringify({ id: taskListId, title }),
   });
 }
 
-export function patchTaskList(mcpToken: string, taskListId: string, updates: any) {
-  return makeGoogleRequest(mcpToken, `/users/@me/lists/${taskListId}`, {
+export function patchTaskList(client: GoogleClient, taskListId: string, updates: any) {
+  return makeGoogleRequest(client, `/users/@me/lists/${taskListId}`, {
     method: "PATCH",
     body: JSON.stringify(updates),
   });
 }
 
-export function deleteTaskList(mcpToken: string, taskListId: string) {
-  return makeGoogleRequest(mcpToken, `/users/@me/lists/${taskListId}`, {
+export function deleteTaskList(client: GoogleClient, taskListId: string) {
+  return makeGoogleRequest(client, `/users/@me/lists/${taskListId}`, {
     method: "DELETE",
   });
 }
 
 export function listTasks(
-  mcpToken: string,
+  client: GoogleClient,
   taskListId: string,
   options?: {
     completedMax?: string;
@@ -124,53 +101,53 @@ export function listTasks(
   if (options?.updatedMin) params.append("updatedMin", options.updatedMin);
 
   const query = params.toString() ? `?${params.toString()}` : "";
-  return makeGoogleRequest(mcpToken, `/lists/${taskListId}/tasks${query}`);
+  return makeGoogleRequest(client, `/lists/${taskListId}/tasks${query}`);
 }
 
-export function getTask(mcpToken: string, taskListId: string, taskId: string) {
-  return makeGoogleRequest(mcpToken, `/lists/${taskListId}/tasks/${taskId}`);
+export function getTask(client: GoogleClient, taskListId: string, taskId: string) {
+  return makeGoogleRequest(client, `/lists/${taskListId}/tasks/${taskId}`);
 }
 
-export function insertTask(mcpToken: string, taskListId: string, task: any, parent?: string, previous?: string) {
+export function insertTask(client: GoogleClient, taskListId: string, task: any, parent?: string, previous?: string) {
   const params = new URLSearchParams();
   if (parent) params.append("parent", parent);
   if (previous) params.append("previous", previous);
 
   const query = params.toString() ? `?${params.toString()}` : "";
-  return makeGoogleRequest(mcpToken, `/lists/${taskListId}/tasks${query}`, {
+  return makeGoogleRequest(client, `/lists/${taskListId}/tasks${query}`, {
     method: "POST",
     body: JSON.stringify(task),
   });
 }
 
-export function updateTask(mcpToken: string, taskListId: string, taskId: string, task: any) {
-  return makeGoogleRequest(mcpToken, `/lists/${taskListId}/tasks/${taskId}`, {
+export function updateTask(client: GoogleClient, taskListId: string, taskId: string, task: any) {
+  return makeGoogleRequest(client, `/lists/${taskListId}/tasks/${taskId}`, {
     method: "PUT",
     body: JSON.stringify({ ...task, id: taskId }),
   });
 }
 
-export function patchTask(mcpToken: string, taskListId: string, taskId: string, updates: any) {
-  return makeGoogleRequest(mcpToken, `/lists/${taskListId}/tasks/${taskId}`, {
+export function patchTask(client: GoogleClient, taskListId: string, taskId: string, updates: any) {
+  return makeGoogleRequest(client, `/lists/${taskListId}/tasks/${taskId}`, {
     method: "PATCH",
     body: JSON.stringify(updates),
   });
 }
 
-export function deleteTask(mcpToken: string, taskListId: string, taskId: string) {
-  return makeGoogleRequest(mcpToken, `/lists/${taskListId}/tasks/${taskId}`, {
+export function deleteTask(client: GoogleClient, taskListId: string, taskId: string) {
+  return makeGoogleRequest(client, `/lists/${taskListId}/tasks/${taskId}`, {
     method: "DELETE",
   });
 }
 
-export function clearTasks(mcpToken: string, taskListId: string) {
-  return makeGoogleRequest(mcpToken, `/lists/${taskListId}/clear`, {
+export function clearTasks(client: GoogleClient, taskListId: string) {
+  return makeGoogleRequest(client, `/lists/${taskListId}/clear`, {
     method: "POST",
   });
 }
 
 export function moveTask(
-  mcpToken: string,
+  client: GoogleClient,
   taskListId: string,
   taskId: string,
   parent?: string,
@@ -181,7 +158,7 @@ export function moveTask(
   if (previous) params.append("previous", previous);
 
   const query = params.toString() ? `?${params.toString()}` : "";
-  return makeGoogleRequest(mcpToken, `/lists/${taskListId}/tasks/${taskId}/move${query}`, {
+  return makeGoogleRequest(client, `/lists/${taskListId}/tasks/${taskId}/move${query}`, {
     method: "POST",
   });
 }

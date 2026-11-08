@@ -1,0 +1,8 @@
+# Copy to terraform.tfvars (git-ignored) and fill in. Never commit real values.
+project_id           = "<project>"
+region               = "<region>"
+issuer_url           = "https://<host>"
+allowed_domain       = "<domain>"
+privacy_policy_url   = "https://<your-site>/privacy"   # optional; /privacy-policy redirects here
+custom_domain        = "<host>"
+enable_custom_domain = false # true once the domain is verified for the project

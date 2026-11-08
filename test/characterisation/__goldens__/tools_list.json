@@ -1,0 +1,456 @@
+[
+  {
+    "result": {
+      "tools": [
+        {
+          "name": "list_task_lists",
+          "description": "Returns all the authenticated user's task lists. A user can have up to 2000 lists at a time.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "maxResults": {
+                "type": "number",
+                "description": "Maximum number of task lists returned on one page. Default is 1000 (max allowed: 1000)."
+              },
+              "pageToken": {
+                "type": "string",
+                "description": "Token specifying the result page to return."
+              }
+            },
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        },
+        {
+          "name": "get_task_list",
+          "description": "Returns the authenticated user's specified task list.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "taskListId": {
+                "type": "string",
+                "description": "Task list identifier."
+              }
+            },
+            "required": [
+              "taskListId"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        },
+        {
+          "name": "insert_task_list",
+          "description": "Creates a new task list and adds it to the authenticated user's task lists.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "description": "Title of the task list."
+              }
+            },
+            "required": [
+              "title"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        },
+        {
+          "name": "update_task_list",
+          "description": "Updates the authenticated user's specified task list. This method supports full update.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "taskListId": {
+                "type": "string",
+                "description": "Task list identifier."
+              },
+              "title": {
+                "type": "string",
+                "description": "Title of the task list."
+              }
+            },
+            "required": [
+              "taskListId",
+              "title"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        },
+        {
+          "name": "patch_task_list",
+          "description": "Updates the authenticated user's specified task list. This method supports patch semantics.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "taskListId": {
+                "type": "string",
+                "description": "Task list identifier."
+              },
+              "title": {
+                "type": "string",
+                "description": "Title of the task list."
+              }
+            },
+            "required": [
+              "taskListId",
+              "title"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        },
+        {
+          "name": "delete_task_list",
+          "description": "Deletes the authenticated user's specified task list.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "taskListId": {
+                "type": "string",
+                "description": "Task list identifier."
+              }
+            },
+            "required": [
+              "taskListId"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        },
+        {
+          "name": "list_tasks",
+          "description": "Returns all tasks in the specified task list. IMPORTANT: To see completed tasks from the web UI or mobile apps, you MUST set both showCompleted=true AND showHidden=true. Google Tasks API does not expose future instances of recurring tasks. When filtering by due date, only the current instance of recurring tasks will be shown, not future occurrences.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "taskListId": {
+                "type": "string",
+                "description": "Task list identifier."
+              },
+              "completedMax": {
+                "type": "string",
+                "description": "Upper bound for a task's completion date (RFC 3339 timestamp) to filter by."
+              },
+              "completedMin": {
+                "type": "string",
+                "description": "Lower bound for a task's completion date (RFC 3339 timestamp) to filter by."
+              },
+              "dueMax": {
+                "type": "string",
+                "description": "Upper bound for a task's due date (RFC 3339 timestamp) to filter by."
+              },
+              "dueMin": {
+                "type": "string",
+                "description": "Lower bound for a task's due date (RFC 3339 timestamp) to filter by."
+              },
+              "maxResults": {
+                "type": "number",
+                "description": "Maximum number of tasks returned on one page."
+              },
+              "pageToken": {
+                "type": "string",
+                "description": "Token specifying the result page to return."
+              },
+              "showCompleted": {
+                "type": "boolean",
+                "description": "Flag indicating whether completed tasks are returned in the result. Default is true."
+              },
+              "showDeleted": {
+                "type": "boolean",
+                "description": "Flag indicating whether deleted tasks are returned in the result. Default is false."
+              },
+              "showHidden": {
+                "type": "boolean",
+                "description": "Flag indicating whether hidden tasks are returned in the result. IMPORTANT: Must be true to show tasks completed in the web UI or mobile apps. Default is false."
+              },
+              "updatedMin": {
+                "type": "string",
+                "description": "Lower bound for a task's last modification time (RFC 3339 timestamp) to filter by."
+              }
+            },
+            "required": [
+              "taskListId"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        },
+        {
+          "name": "get_task",
+          "description": "Returns the specified task.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "taskListId": {
+                "type": "string",
+                "description": "Task list identifier."
+              },
+              "taskId": {
+                "type": "string",
+                "description": "Task identifier."
+              }
+            },
+            "required": [
+              "taskListId",
+              "taskId"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        },
+        {
+          "name": "insert_task",
+          "description": "Creates a new task on the specified task list.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "taskListId": {
+                "type": "string",
+                "description": "Task list identifier."
+              },
+              "title": {
+                "type": "string",
+                "description": "Title of the task."
+              },
+              "notes": {
+                "type": "string",
+                "description": "Notes describing the task."
+              },
+              "due": {
+                "type": "string",
+                "description": "Due date of the task (RFC 3339 timestamp, e.g., '2025-01-15T00:00:00.000Z')."
+              },
+              "parent": {
+                "type": "string",
+                "description": "Parent task identifier. If specified, the task is created as a subtask."
+              },
+              "previous": {
+                "type": "string",
+                "description": "Previous sibling task identifier. If specified, the task is created at the position after this sibling."
+              }
+            },
+            "required": [
+              "taskListId",
+              "title"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        },
+        {
+          "name": "update_task",
+          "description": "Updates the specified task. This method supports full update.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "taskListId": {
+                "type": "string",
+                "description": "Task list identifier."
+              },
+              "taskId": {
+                "type": "string",
+                "description": "Task identifier."
+              },
+              "title": {
+                "type": "string",
+                "description": "Title of the task."
+              },
+              "notes": {
+                "type": "string",
+                "description": "Notes describing the task."
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "needsAction",
+                  "completed"
+                ],
+                "description": "Status of the task. Either 'needsAction' or 'completed'."
+              },
+              "due": {
+                "type": "string",
+                "description": "Due date of the task (RFC 3339 timestamp, e.g., '2025-01-15T00:00:00.000Z')."
+              },
+              "completed": {
+                "type": "string",
+                "description": "Completion date of the task (RFC 3339 timestamp). Only set when status is 'completed'."
+              }
+            },
+            "required": [
+              "taskListId",
+              "taskId"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        },
+        {
+          "name": "patch_task",
+          "description": "Updates the specified task. This method supports patch semantics.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "taskListId": {
+                "type": "string",
+                "description": "Task list identifier."
+              },
+              "taskId": {
+                "type": "string",
+                "description": "Task identifier."
+              },
+              "title": {
+                "type": "string",
+                "description": "Title of the task."
+              },
+              "notes": {
+                "type": "string",
+                "description": "Notes describing the task."
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "needsAction",
+                  "completed"
+                ],
+                "description": "Status of the task. Either 'needsAction' or 'completed'."
+              },
+              "due": {
+                "type": "string",
+                "description": "Due date of the task (RFC 3339 timestamp, e.g., '2025-01-15T00:00:00.000Z')."
+              },
+              "completed": {
+                "type": "string",
+                "description": "Completion date of the task (RFC 3339 timestamp). Only set when status is 'completed'."
+              }
+            },
+            "required": [
+              "taskListId",
+              "taskId"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        },
+        {
+          "name": "delete_task",
+          "description": "Deletes the specified task from the task list.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "taskListId": {
+                "type": "string",
+                "description": "Task list identifier."
+              },
+              "taskId": {
+                "type": "string",
+                "description": "Task identifier."
+              }
+            },
+            "required": [
+              "taskListId",
+              "taskId"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        },
+        {
+          "name": "clear_completed_tasks",
+          "description": "Clears all completed tasks from the specified task list. The affected tasks will be marked as 'hidden' and no longer be returned by default when retrieving all tasks for a task list.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "taskListId": {
+                "type": "string",
+                "description": "Task list identifier."
+              }
+            },
+            "required": [
+              "taskListId"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        },
+        {
+          "name": "move_task",
+          "description": "Moves the specified task to another position in the destination task list. This can be used to change a task's parent task or position among its sibling tasks.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "taskListId": {
+                "type": "string",
+                "description": "Task list identifier."
+              },
+              "taskId": {
+                "type": "string",
+                "description": "Task identifier."
+              },
+              "parent": {
+                "type": "string",
+                "description": "New parent task identifier. If not specified, the task is moved to the top level."
+              },
+              "previous": {
+                "type": "string",
+                "description": "New previous sibling task identifier. If not specified, the task is moved to the first position among its siblings."
+              }
+            },
+            "required": [
+              "taskListId",
+              "taskId"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        }
+      ]
+    },
+    "jsonrpc": "2.0"
+  }
+]

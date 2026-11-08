@@ -1,0 +1,11 @@
+{
+  "_provenance": "docs",
+  "request": {
+    "method": "POST",
+    "path": "/tasks/v1/lists/{tasklist}/clear"
+  },
+  "response": {
+    "status": 204,
+    "body": null
+  }
+}

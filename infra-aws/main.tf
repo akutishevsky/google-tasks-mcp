@@ -1,229 +1,238 @@
 locals {
   name = var.service_name
+
+  # The Lambda execution role name is fixed so the KMS key policy can grant it
+  # Encrypt/Decrypt without creating a kms <-> lambda module cycle.
+  lambda_role_name = "${local.name}-lambda"
+  lambda_role_arn  = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.lambda_role_name}"
+
+  # When the Route 53 zone is in this account, Terraform owns the whole DNS
+  # flow (ACM validation records + wait, and the custom-domain alias record).
+  route53_managed = var.enable_custom_domain && var.route53_zone_id != ""
+
+  lambda_environment = merge({
+    GOOGLE_REDIRECT_URI    = "${var.issuer_url}/callback"
+    ISSUER_URL             = var.issuer_url
+    STORAGE                = "dynamodb"
+    DYNAMODB_TABLE         = module.dynamodb.dynamodb_table_id
+    CIPHER                 = "awskms"
+    AWS_KMS_KEY_ID         = module.kms.key_arn
+    GOOGLE_OAUTH_SECRET_ID = module.secret.secret_arn
+    ALLOWED_DOMAIN         = var.allowed_domain
+    ALLOWED_REDIRECT_URIS  = join(",", var.allowed_redirect_uris)
+    TRUST_PROXY_HOPS       = "1"
+    PUBLIC_PAGES           = var.public_pages
+    ANALYTICS              = "false" # never report a shared server's visitors to upstream's analytics
+    LOG_LEVEL              = "info"
+  }, var.privacy_policy_url == "" ? {} : { PRIVACY_POLICY_URL = var.privacy_policy_url })
 }
 
 data "aws_caller_identity" "current" {}
-data "aws_region" "current" {}
+data "aws_partition" "current" {}
 
 # --- DynamoDB: single-table store -------------------------------------------
 
 # pk (partition) + sk (sort), both strings; numeric `ttl` attribute (epoch
 # seconds) drives DynamoDB TTL. The server checks `expiresAt` (epoch ms) on
 # every read, so DynamoDB TTL is garbage collection only.
-resource "aws_dynamodb_table" "store" {
+module "dynamodb" {
+  source  = "terraform-aws-modules/dynamodb-table/aws"
+  version = "5.5.2"
+
   name         = local.name
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "pk"
   range_key    = "sk"
 
-  attribute {
-    name = "pk"
-    type = "S"
-  }
+  attributes = [
+    { name = "pk", type = "S" },
+    { name = "sk", type = "S" },
+  ]
 
-  attribute {
-    name = "sk"
-    type = "S"
-  }
+  ttl_enabled        = true
+  ttl_attribute_name = "ttl"
 
-  ttl {
-    attribute_name = "ttl"
-    enabled        = true
-  }
-
-  point_in_time_recovery {
-    enabled = true
-  }
+  point_in_time_recovery_enabled = true
 }
 
 # --- KMS: per-token encryption ----------------------------------------------
 
-resource "aws_kms_key" "tokens" {
-  description             = "${local.name} token encryption (per-token KMS Encrypt/Decrypt)"
-  enable_key_rotation     = true
-  deletion_window_in_days = 30
-}
+module "kms" {
+  source  = "terraform-aws-modules/kms/aws"
+  version = "4.2.2"
 
-resource "aws_kms_alias" "tokens" {
-  name          = "alias/${local.name}-tokens"
-  target_key_id = aws_kms_key.tokens.key_id
+  description         = "${local.name} token encryption (per-token KMS Encrypt/Decrypt)"
+  enable_key_rotation = true
+
+  aliases = ["${local.name}-tokens"]
+
+  # Key policy grants the Lambda execution role Encrypt/Decrypt on this key
+  # only. The role ARN is computed (local.lambda_role_arn) to avoid a cycle
+  # with the lambda module.
+  key_statements = [
+    {
+      sid    = "AllowLambdaEncryptDecrypt"
+      effect = "Allow"
+      actions = [
+        "kms:Encrypt",
+        "kms:Decrypt",
+      ]
+      resources = ["*"]
+      principals = [
+        {
+          type        = "AWS"
+          identifiers = [local.lambda_role_arn]
+        }
+      ]
+    }
+  ]
 }
 
 # --- Secrets Manager (value added out of band, see DEPLOY.aws.md) -----------
 
-# One JSON secret: {"client_id":"...","client_secret":"..."}. Created empty;
-# the operator adds the version out of band before the Lambda runs.
-resource "aws_secretsmanager_secret" "google_oauth" {
+# One JSON secret: {"client_id":"...","client_secret":"..."}. Created WITHOUT a
+# version; the operator adds the JSON value out of band before the Lambda runs.
+module "secret" {
+  source  = "terraform-aws-modules/secrets-manager/aws"
+  version = "2.2.0"
+
   name        = "${local.name}-google-oauth"
   description = "Google OAuth client for ${local.name}: JSON { client_id, client_secret }."
-}
 
-# --- IAM: least-privilege Lambda execution role -----------------------------
-
-data "aws_iam_policy_document" "lambda_assume" {
-  statement {
-    effect  = "Allow"
-    actions = ["sts:AssumeRole"]
-    principals {
-      type        = "Service"
-      identifiers = ["lambda.amazonaws.com"]
-    }
-  }
-}
-
-resource "aws_iam_role" "lambda" {
-  name               = "${local.name}-lambda"
-  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
-}
-
-# CloudWatch Logs.
-resource "aws_iam_role_policy_attachment" "lambda_basic" {
-  role       = aws_iam_role.lambda.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-}
-
-data "aws_iam_policy_document" "lambda_runtime" {
-  statement {
-    sid    = "DynamoDb"
-    effect = "Allow"
-    actions = [
-      "dynamodb:GetItem",
-      "dynamodb:PutItem",
-      "dynamodb:DeleteItem",
-      "dynamodb:Query",
-    ]
-    resources = [
-      aws_dynamodb_table.store.arn,
-      "${aws_dynamodb_table.store.arn}/index/*",
-    ]
-  }
-
-  statement {
-    sid    = "Kms"
-    effect = "Allow"
-    actions = [
-      "kms:Encrypt",
-      "kms:Decrypt",
-    ]
-    resources = [aws_kms_key.tokens.arn]
-  }
-
-  statement {
-    sid       = "SecretsManager"
-    effect    = "Allow"
-    actions   = ["secretsmanager:GetSecretValue"]
-    resources = [aws_secretsmanager_secret.google_oauth.arn]
-  }
-}
-
-resource "aws_iam_role_policy" "lambda_runtime" {
-  name   = "${local.name}-runtime"
-  role   = aws_iam_role.lambda.id
-  policy = data.aws_iam_policy_document.lambda_runtime.json
+  create_secret_version = false
 }
 
 # --- Lambda ------------------------------------------------------------------
 
-resource "aws_lambda_function" "server" {
+module "lambda" {
+  source  = "terraform-aws-modules/lambda/aws"
+  version = "8.13.0"
+
   function_name = local.name
-  role          = aws_iam_role.lambda.arn
-  runtime       = "nodejs22.x"
   handler       = "index.handler"
-  filename      = var.lambda_zip_path
+  runtime       = "nodejs22.x"
   timeout       = 30
   memory_size   = 512
 
-  environment {
-    variables = merge({
-      GOOGLE_REDIRECT_URI    = "${var.issuer_url}/callback"
-      ISSUER_URL             = var.issuer_url
-      STORAGE                = "dynamodb"
-      DYNAMODB_TABLE         = aws_dynamodb_table.store.name
-      CIPHER                 = "awskms"
-      AWS_KMS_KEY_ID         = aws_kms_key.tokens.arn
-      GOOGLE_OAUTH_SECRET_ID = aws_secretsmanager_secret.google_oauth.arn
-      ALLOWED_DOMAIN         = var.allowed_domain
-      ALLOWED_REDIRECT_URIS  = join(",", var.allowed_redirect_uris)
-      TRUST_PROXY_HOPS       = "1"
-      PUBLIC_PAGES           = var.public_pages
-      ANALYTICS              = "false" # never report a shared server's visitors to upstream's analytics
-      LOG_LEVEL              = "info"
-    }, var.privacy_policy_url == "" ? {} : { PRIVACY_POLICY_URL = var.privacy_policy_url })
+  # Code is built and deployed out of band (npm run build:lambda +
+  # aws lambda update-function-code / CI); Terraform uses the prebuilt zip for
+  # the initial create and then ignores later code changes.
+  create_package          = false
+  local_existing_package  = var.lambda_zip_path
+  ignore_source_code_hash = true
+
+  environment_variables = local.lambda_environment
+
+  # Fixed role name so the KMS key policy can reference it (local.lambda_role_arn).
+  role_name = local.lambda_role_name
+
+  # Least-privilege runtime policy: DynamoDB item ops + Query on the table and
+  # its indexes, KMS Encrypt/Decrypt on the one key, GetSecretValue on the one
+  # secret. CloudWatch Logs is attached by default (attach_cloudwatch_logs_policy).
+  attach_policy_statements = true
+  policy_statements = {
+    dynamodb = {
+      effect = "Allow"
+      actions = [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:Query",
+      ]
+      resources = [
+        module.dynamodb.dynamodb_table_arn,
+        "${module.dynamodb.dynamodb_table_arn}/index/*",
+      ]
+    }
+    kms = {
+      effect    = "Allow"
+      actions   = ["kms:Encrypt", "kms:Decrypt"]
+      resources = [module.kms.key_arn]
+    }
+    secrets = {
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = [module.secret.secret_arn]
+    }
   }
 
-  lifecycle {
-    # Code is deployed out of band (npm run build:lambda + aws lambda update-function-code / CI).
-    ignore_changes = [filename, source_code_hash]
+  # Let API Gateway invoke the function.
+  allowed_triggers = {
+    APIGateway = {
+      service    = "apigateway"
+      source_arn = "${module.apigateway.api_execution_arn}/*/*"
+    }
   }
-
-  depends_on = [
-    aws_iam_role_policy.lambda_runtime,
-    aws_iam_role_policy_attachment.lambda_basic,
-  ]
 }
 
 # --- API Gateway HTTP API ----------------------------------------------------
 
-resource "aws_apigatewayv2_api" "http" {
+module "apigateway" {
+  source  = "terraform-aws-modules/apigateway-v2/aws"
+  version = "6.1.1"
+
   name          = local.name
   protocol_type = "HTTP"
-}
 
-resource "aws_apigatewayv2_integration" "lambda" {
-  api_id                 = aws_apigatewayv2_api.http.id
-  integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.server.invoke_arn
-  payload_format_version = "2.0"
-}
+  # The module can create its own ACM cert and Route 53 records, but the acm
+  # module owns the certificate here and the alias record is created below, so
+  # both are disabled.
+  create_certificate    = false
+  create_domain_records = false
+  create_domain_name    = var.enable_custom_domain
 
-resource "aws_apigatewayv2_route" "default" {
-  api_id    = aws_apigatewayv2_api.http.id
-  route_key = "$default"
-  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
-}
+  domain_name                 = var.enable_custom_domain ? var.custom_domain : ""
+  domain_name_certificate_arn = var.enable_custom_domain ? module.acm.acm_certificate_arn : null
 
-resource "aws_apigatewayv2_stage" "default" {
-  api_id      = aws_apigatewayv2_api.http.id
-  name        = "$default"
-  auto_deploy = true
-}
-
-resource "aws_lambda_permission" "apigw" {
-  statement_id  = "AllowApiGatewayInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.server.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+  # $default route proxies everything to the Lambda (payload format 2.0). The
+  # module creates the integration, route and $default auto-deploy stage.
+  routes = {
+    "$default" = {
+      integration = {
+        uri                    = module.lambda.lambda_function_arn
+        type                   = "AWS_PROXY"
+        payload_format_version = "2.0"
+      }
+    }
+  }
 }
 
 # --- Custom domain (stable hostname for the OAuth issuer/redirect) ----------
 
 # The custom domain gives a stable hostname from day one, so the issuer and
-# redirect URI baked into every connector never have to change.
-resource "aws_acm_certificate" "custom" {
-  count             = var.enable_custom_domain ? 1 : 0
+# redirect URI baked into every connector never have to change. When
+# route53_zone_id is set (zone in this account), the acm module writes the DNS
+# validation records and waits for ISSUED, and the alias record below points
+# custom_domain at the API Gateway domain target -- a single apply, no manual
+# DNS. When it is empty, the cert is created but not validated here; create the
+# records from the acm_validation_records / custom_domain_target outputs.
+module "acm" {
+  source  = "terraform-aws-modules/acm/aws"
+  version = "6.3.1"
+
+  create_certificate = var.enable_custom_domain
+
   domain_name       = var.custom_domain
+  zone_id           = var.route53_zone_id
   validation_method = "DNS"
 
-  lifecycle {
-    create_before_destroy = true
-  }
+  create_route53_records = local.route53_managed
+  validate_certificate   = local.route53_managed
+  wait_for_validation    = local.route53_managed
 }
 
-resource "aws_apigatewayv2_domain_name" "custom" {
-  count       = var.enable_custom_domain ? 1 : 0
-  domain_name = var.custom_domain
+# Alias record pointing custom_domain at the API Gateway v2 regional domain.
+# Only created when the zone is in this account (route53_managed).
+resource "aws_route53_record" "custom_alias" {
+  for_each = local.route53_managed ? toset(["A", "AAAA"]) : toset([])
 
-  domain_name_configuration {
-    certificate_arn = aws_acm_certificate.custom[0].arn
-    endpoint_type   = "REGIONAL"
-    security_policy = "TLS_1_2"
+  zone_id = var.route53_zone_id
+  name    = var.custom_domain
+  type    = each.value
+
+  alias {
+    name                   = module.apigateway.domain_name_target_domain_name
+    zone_id                = module.apigateway.domain_name_hosted_zone_id
+    evaluate_target_health = false
   }
-}
-
-resource "aws_apigatewayv2_api_mapping" "custom" {
-  count       = var.enable_custom_domain ? 1 : 0
-  api_id      = aws_apigatewayv2_api.http.id
-  domain_name = aws_apigatewayv2_domain_name.custom[0].id
-  stage       = aws_apigatewayv2_stage.default.id
 }

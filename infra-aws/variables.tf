@@ -54,6 +54,12 @@ variable "enable_custom_domain" {
   default     = false
 }
 
+variable "route53_zone_id" {
+  description = "Route 53 hosted zone ID for custom_domain, when the zone lives in this account. Set it and Terraform owns the whole DNS flow: the ACM module writes the validation records and waits for ISSUED, and the alias record for custom_domain is created pointing at the API Gateway. Leave empty when the zone is elsewhere; then create the acm_validation_records and custom_domain_target records by hand."
+  type        = string
+  default     = ""
+}
+
 variable "lambda_zip_path" {
   description = "Path to the built Lambda deployment package (zip of build/lambda/). The code is deployed out of band; Terraform ignores later changes."
   type        = string

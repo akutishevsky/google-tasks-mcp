@@ -179,25 +179,40 @@ tool `isError`, domain mismatch 403, unknown client/redirect 400) are unchanged.
 
 ## 8. Infrastructure (`infra-aws/`)
 
-Terraform, AWS provider (`~> 5.0`), S3 + DynamoDB state backend. `region`,
-`issuer_url`, `allowed_domain`, `custom_domain` are variables with no committed
-values; the backend is passed with `terraform init -backend-config=backend.hcl`.
-`.gitignore` excludes `infra-aws/*.tfvars` (except `terraform.tfvars.example`),
-`backend.hcl`, `.terraform/`, `.terraform.lock.hcl` and `*.tfstate*`.
+Terraform, AWS provider (`~> 6.0`), S3 + DynamoDB state backend. The resources
+are built from the official `terraform-aws-modules/*` registry modules rather
+than bare resources (the user's stated preference): `dynamodb-table`, `kms`,
+`secrets-manager`, `lambda`, `apigateway-v2` and `acm`, each pinned to a current
+stable version; `terraform init` downloads them. `region`, `issuer_url`,
+`allowed_domain`, `custom_domain` and `route53_zone_id` are variables with no
+committed values; the backend is passed with `terraform init
+-backend-config=backend.hcl`. `.gitignore` excludes `infra-aws/*.tfvars` (except
+`terraform.tfvars.example`), `backend.hcl`, `.terraform/`, `.terraform.lock.hcl`
+and `*.tfstate*`.
 
-| Resource | Notes |
-|----------|-------|
-| DynamoDB table `google-tasks-mcp` | single table, `pk` (S, HASH) + `sk` (S, RANGE), `PAY_PER_REQUEST`, TTL on `ttl`, point-in-time recovery |
-| KMS key + alias `alias/google-tasks-mcp-tokens` | key rotation on; role gets Encrypt/Decrypt on this key only |
-| Secrets Manager `google-tasks-mcp-google-oauth` | created empty; the operator adds the JSON version out of band |
-| IAM role `google-tasks-mcp-lambda` | assume-role for `lambda.amazonaws.com`; inline least-privilege (DynamoDB item ops + Query, KMS Encrypt/Decrypt, Secrets Manager GetSecretValue) + `AWSLambdaBasicExecutionRole` |
-| Lambda `google-tasks-mcp` | `nodejs22.x`, handler `index.handler`, env from §6; code deployed out of band (ignored in lifecycle) |
-| API Gateway HTTP API + `$default` route + `$default` stage | `AWS_PROXY` integration (payload 2.0) to the Lambda; `aws_lambda_permission` for `apigateway.amazonaws.com` |
-| ACM certificate + API Gateway v2 custom domain + mapping | behind `enable_custom_domain`; outputs the ACM validation CNAMEs and the custom-domain target to create in DNS |
+| Module | Notes |
+|--------|-------|
+| `dynamodb-table` → `google-tasks-mcp` | single table, `pk` (S, HASH) + `sk` (S, RANGE), `PAY_PER_REQUEST`, TTL on `ttl`, point-in-time recovery |
+| `kms` → key + alias `alias/google-tasks-mcp-tokens` | key rotation on; `key_statements` grant the Lambda role Encrypt/Decrypt on this key only. The role ARN is computed (fixed `role_name`) so the key policy does not create a module cycle |
+| `secrets-manager` → `google-tasks-mcp-google-oauth` | created `create_secret_version = false` (no version); the operator adds the JSON value out of band |
+| `lambda` → `google-tasks-mcp` + execution role | `nodejs22.x`, handler `index.handler`, env from §6; `create_package = false` + `local_existing_package` for the prebuilt zip; `ignore_source_code_hash` so out-of-band code deploys are not reverted; least-privilege `policy_statements` (DynamoDB item ops + Query, KMS Encrypt/Decrypt, Secrets Manager GetSecretValue) plus the module's CloudWatch Logs policy; `allowed_triggers` grants API Gateway invoke |
+| `apigateway-v2` → HTTP API + `$default` route + `$default` stage (+ custom domain) | `AWS_PROXY` integration (payload 2.0) to the Lambda; the module also manages the custom domain name + API mapping behind `enable_custom_domain`, with its own cert and record creation disabled (owned by the `acm` module and the alias record below) |
+| `acm` → certificate (+ in-account validation) | behind `enable_custom_domain`, `validation_method = DNS`. When `route53_zone_id` is set, the module writes the validation records in that zone and waits for ISSUED; otherwise the cert is created but not validated here, and the validation records are exposed as an output |
+| `aws_route53_record` alias (bare resource) | `A`/`AAAA` alias for `custom_domain` → the API Gateway domain target; created only when `route53_zone_id` is set. The one bare resource kept, since no module owns both the acm cert and the apigateway target |
+
+**In-account Route 53 flow.** With `enable_custom_domain = true` and
+`route53_zone_id` set (the zone lives in this account), a single `terraform apply`
+stands up the cert, writes and waits on the DNS validation records, creates the
+custom domain + mapping, and adds the alias record — no manual DNS. The regional
+ACM certificate is created in the deployment region (e.g. `eu-west-1`), not
+`us-east-1`, because there is no CloudFront. The manual-records outputs
+(`acm_validation_records`, `custom_domain_target`) remain as a fallback for a zone
+in another account and are empty/unused when `route53_zone_id` is set.
 
 Manual one-offs, recorded in `DEPLOY.aws.md`: OAuth consent screen (Internal),
-OAuth client (web, redirect `<ISSUER_URL>/callback`), the single JSON secret
-version, and the custom-domain/ACM DNS records.
+OAuth client (web, redirect `<ISSUER_URL>/callback`), and the single JSON secret
+version. When `route53_zone_id` is set there are no manual DNS steps; only a
+zone in another account needs the custom-domain/ACM records created by hand.
 
 ## 9. Deploy and operate
 

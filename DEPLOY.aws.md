@@ -15,8 +15,10 @@ files (`infra-aws/terraform.tfvars`, `infra-aws/backend.hcl`) or in a private re
 - AWS CLI authenticated with permission to create DynamoDB, KMS, Secrets Manager,
   IAM, Lambda and API Gateway resources; `terraform` ≥ 1.6; Node 22.
 - An S3 bucket for Terraform state and a DynamoDB table for the state lock.
-- For a custom hostname: access to the domain's DNS to create the ACM validation
-  and custom-domain records.
+- For a custom hostname: a Route 53 hosted zone. If the zone is in this account,
+  set `route53_zone_id` and Terraform owns the whole DNS flow (validation records,
+  the ISSUED wait and the alias record) — no manual steps. If the zone is elsewhere,
+  you create the ACM validation and custom-domain records by hand from the outputs.
 
 ## 1. Infrastructure
 
@@ -26,7 +28,7 @@ cp terraform.tfvars.example terraform.tfvars   # fill in
 cp backend.hcl.example backend.hcl             # fill in
 terraform init -backend-config=backend.hcl
 # First run: create the secret before the Lambda that reads it.
-terraform apply -var-file=terraform.tfvars -target=aws_secretsmanager_secret.google_oauth
+terraform apply -var-file=terraform.tfvars -target=module.secret
 ```
 
 Now add the OAuth client credentials (step 2), then come back and apply the rest:
@@ -39,11 +41,18 @@ terraform apply -var-file=terraform.tfvars
 The Lambda fetches the secret at cold start, so creating the secret first keeps
 the two-phase apply clean.
 
-Creates: the DynamoDB table (single table, TTL on `ttl`, point-in-time recovery),
-the KMS key + alias (`alias/<service>-tokens`, rotation on), the empty Secrets
-Manager secret, the least-privilege Lambda execution role, the Lambda function
-(placeholder code), the API Gateway HTTP API with the `$default` route + invoke
-permission, and optionally the ACM certificate and API Gateway custom domain.
+`infra-aws/` is built from the official `terraform-aws-modules/*` registry modules
+(pinned): `dynamodb-table`, `kms`, `secrets-manager`, `lambda`, `apigateway-v2`
+and `acm`. `terraform init` downloads them. Together they create: the DynamoDB
+table (single table, TTL on `ttl`, point-in-time recovery), the KMS key + alias
+(`alias/<service>-tokens`, rotation on, key policy granting the Lambda role
+Encrypt/Decrypt), the empty Secrets Manager secret (no version — added out of
+band), the least-privilege Lambda execution role + function (placeholder code),
+the API Gateway HTTP API with the `$default` route, `$default` stage and invoke
+permission, and — behind `enable_custom_domain` — the ACM certificate and API
+Gateway custom domain + mapping. When `route53_zone_id` is set, it also writes
+the ACM DNS validation records, waits for ISSUED, and creates the alias record
+for the hostname, so one `terraform apply` needs no manual DNS.
 
 ## 2. OAuth client (console, one-off; before the full apply)
 
@@ -76,17 +85,26 @@ update-function-code` (or CI) owns rollouts. The handler is `index.handler`.
 
 ## 4. Custom hostname
 
-Set `enable_custom_domain = true`, apply, then:
+Set `enable_custom_domain = true`. Use the custom hostname from day one: the
+issuer and redirect URI are baked into every connector, and changing them forces
+everyone to reconnect.
+
+**Zone in this account (recommended):** set `route53_zone_id` to the hosted zone
+ID. One `terraform apply` creates the ACM certificate, writes the DNS validation
+records in that zone, waits for the cert to be ISSUED, creates the API Gateway
+custom domain + mapping, and adds the alias `A`/`AAAA` record for the hostname —
+no manual DNS. (Validation can still take a few minutes while the apply waits.)
+
+**Zone in another account (fallback):** leave `route53_zone_id = ""`. The cert is
+created but not validated by Terraform; create the records by hand:
 
 ```bash
-terraform -chdir=infra-aws output acm_validation_records   # create these CNAMEs at your DNS provider
+terraform -chdir=infra-aws output acm_validation_records   # create these records at your DNS provider first
 terraform -chdir=infra-aws output custom_domain_target     # point <host> at target_domain_name
 ```
 
-Create the ACM validation CNAME(s) first; certificate validation and the custom
-domain can take a while. Use the custom hostname from day one: the issuer and
-redirect URI are baked into every connector, and changing them forces everyone to
-reconnect.
+Create the ACM validation record(s) first; certificate validation and the custom
+domain can take a while.
 
 ## 5. Checks (no browser)
 

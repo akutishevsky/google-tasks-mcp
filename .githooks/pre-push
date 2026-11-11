@@ -87,9 +87,7 @@ stale_message() {
 pre-push: the committed $ZIP_PATH is stale (it does not match the current src/).
 Rebuild the Lambda artifact before pushing:
 
-  npm run build:lambda
-  (cd build/lambda && zip -r ../lambda.zip .)
-  cp build/lambda.zip $ZIP_PATH
+  npm run build:lambda:zip
   git add $ZIP_PATH
 
 then re-commit and push again.

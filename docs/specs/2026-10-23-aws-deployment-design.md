@@ -190,6 +190,27 @@ committed values; the backend is passed with `terraform init
 `terraform.tfvars.example`), `backend.hcl`, `.terraform/`, `.terraform.lock.hcl`
 and `*.tfstate*`.
 
+**Hybrid layout (thin root + reusable child).** `infra-aws/` is split so the
+module is reusable: the thin root (`infra-aws/`) holds the **backend and provider
+only** and calls the reusable child module at
+`infra-aws/modules/google-tasks-mcp/`, which holds all the resource logic and a
+`versions.tf` with only `required_providers` (no backend, no provider block). The
+root stays deployable standalone (`terraform init -backend-config=backend.hcl`,
+`terraform apply -var-file=terraform.tfvars`); another project can instead
+reference the child directly with a Git source and a pinned `?ref=`
+(`source = "github.com/franc-liuzzi/google-tasks-mcp//infra-aws/modules/google-tasks-mcp?ref=<ref>"`),
+supplying its own backend and provider. See `infra-aws/README.md`.
+
+**Committed Lambda zip.** The Lambda package is a prebuilt, committed artifact
+rather than built at apply time: the default is `infra-aws/src/lambda.zip`
+(resolved by the module when `lambda_zip_path` is null), so whoever applies the
+module does not have to build. Whoever pushes rebuilds and copies the zip first;
+a `pre-push` hook (`.githooks/pre-push`, enabled with `git config core.hooksPath
+.githooks`) rebuilds the bundle and blocks the push when the committed zip is
+stale against `src/`. The `lambda_version` input (the `package.json` version) is
+written as the `lambda-version` resource tag on the Lambda and re-exposed as the
+`lambda_version` output, so a deployed function traces back to its build.
+
 | Module | Notes |
 |--------|-------|
 | `dynamodb-table` → `google-tasks-mcp` | single table, `pk` (S, HASH) + `sk` (S, RANGE), `PAY_PER_REQUEST`, TTL on `ttl`, point-in-time recovery |

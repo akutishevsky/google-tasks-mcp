@@ -41,6 +41,15 @@ terraform apply -var-file=terraform.tfvars
 The Lambda fetches the secret at cold start, so creating the secret first keeps
 the two-phase apply clean.
 
+`infra-aws/` is a thin root (backend + provider) that calls the reusable child
+module at `infra-aws/modules/google-tasks-mcp/`, where all the resource logic
+lives. The init/apply commands above are unchanged by this layout — see
+[`infra-aws/README.md`](infra-aws/README.md) for the root-vs-child split and for
+referencing the child module remotely. The default Lambda package is the
+committed artifact `infra-aws/src/lambda.zip` (the module resolves it when
+`lambda_zip_path` is left null); rebuilding it before every push is covered in
+§3.
+
 `infra-aws/` is built from the official `terraform-aws-modules/*` registry modules
 (pinned): `dynamodb-table`, `kms`, `secrets-manager`, `lambda`, `apigateway-v2`
 and `acm`. `terraform init` downloads them. Together they create: the DynamoDB
@@ -82,6 +91,26 @@ aws lambda update-function-code --function-name "$FN" --zip-file fileb://build/l
 
 Terraform ignores the function code after creation, so `aws lambda
 update-function-code` (or CI) owns rollouts. The handler is `index.handler`.
+
+> **Build before every push.** The committed `infra-aws/src/lambda.zip` is the
+> default package Terraform deploys, so it must be rebuilt and copied into place
+> before every push or tag that changes `src/`. The build is the responsibility
+> of whoever pushes — it is never delegated to whoever applies the module.
+
+```bash
+npm run build:lambda
+(cd build/lambda && zip -r ../lambda.zip .)
+cp build/lambda.zip infra-aws/src/lambda.zip
+git add infra-aws/src/lambda.zip
+```
+
+A `pre-push` hook ([`.githooks/pre-push`](.githooks/pre-push)) enforces this: if
+the push range touches `src/`, it rebuilds the bundle and blocks the push when
+`infra-aws/src/lambda.zip` is stale or missing. Enable it once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
 
 The bundle marks `@aws-sdk/*`, `@deno/kv` and `@google-cloud/*` as external:
 the AWS SDK v3 is provided by the `nodejs22.x` runtime, and the other two are

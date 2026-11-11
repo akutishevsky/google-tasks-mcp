@@ -83,10 +83,9 @@ aws secretsmanager put-secret-value --secret-id "$SECRET" \
 
 ```bash
 npm ci
-npm run build:lambda                 # bundles build/lambda/index.mjs with esbuild
-(cd build/lambda && zip -r ../lambda.zip .)   # zip the directory contents (index.mjs at the root)
+npm run build:lambda:zip             # builds the bundle and writes infra-aws/src/lambda.zip
 FN=$(terraform -chdir=infra-aws output -raw lambda_function_name)
-aws lambda update-function-code --function-name "$FN" --zip-file fileb://build/lambda.zip
+aws lambda update-function-code --function-name "$FN" --zip-file fileb://infra-aws/src/lambda.zip
 ```
 
 Terraform ignores the function code after creation, so `aws lambda
@@ -98,9 +97,7 @@ update-function-code` (or CI) owns rollouts. The handler is `index.handler`.
 > of whoever pushes — it is never delegated to whoever applies the module.
 
 ```bash
-npm run build:lambda
-(cd build/lambda && zip -r ../lambda.zip .)
-cp build/lambda.zip infra-aws/src/lambda.zip
+npm run build:lambda:zip   # builds the bundle and writes infra-aws/src/lambda.zip
 git add infra-aws/src/lambda.zip
 ```
 

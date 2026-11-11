@@ -67,7 +67,7 @@ variable "lambda_zip_path" {
 }
 
 variable "lambda_version" {
-  description = "Version of the committed Lambda deployment package (package.json version). Applied as the lambda-version resource tag and exposed as an output so a deploy can be traced back to a build."
+  description = "Version recorded as the lambda-version tag/output so a deploy can be traced back to a build. Null (the default) reads the version from package.json at the repo root; set it explicitly to override (e.g. in CI with a git describe)."
   type        = string
-  default     = "1.0.0"
+  default     = null
 }

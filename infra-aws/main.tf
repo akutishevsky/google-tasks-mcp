@@ -1,6 +1,15 @@
 # Thin root: the backend and provider live here (versions.tf); all resource
 # logic lives in the reusable child module, which this calls with every input
 # and whose outputs are re-exposed in outputs.tf.
+
+locals {
+  # lambda_version defaults to the version in the repo-root package.json, so the
+  # lambda-version tag/output tracks the released version with no manual step.
+  # An explicit var.lambda_version (e.g. a CI-supplied git describe) overrides it.
+  package_version = jsondecode(file("${path.module}/../package.json")).version
+  lambda_version  = coalesce(var.lambda_version, local.package_version)
+}
+
 module "google-tasks-mcp" {
   source = "./modules/google-tasks-mcp"
 
@@ -14,5 +23,5 @@ module "google-tasks-mcp" {
   enable_custom_domain  = var.enable_custom_domain
   route53_zone_id       = var.route53_zone_id
   lambda_zip_path       = var.lambda_zip_path
-  lambda_version        = var.lambda_version
+  lambda_version        = local.lambda_version
 }

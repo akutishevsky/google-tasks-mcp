@@ -14,10 +14,12 @@ module "lambda" {
   # aws lambda update-function-code / CI); Terraform uses the prebuilt zip for
   # the initial create and then ignores later code changes.
   create_package          = false
-  local_existing_package  = var.lambda_zip_path
+  local_existing_package  = local.lambda_zip_path
   ignore_source_code_hash = true
 
   environment_variables = local.lambda_environment
+
+  tags = { "lambda-version" = var.lambda_version }
 
   # Fixed role name so the KMS key policy can reference it (local.lambda_role_arn).
   role_name = local.lambda_role_name

@@ -61,7 +61,13 @@ variable "route53_zone_id" {
 }
 
 variable "lambda_zip_path" {
-  description = "Path to the built Lambda deployment package (zip of build/lambda/). The code is deployed out of band; Terraform ignores later changes."
+  description = "Path to the built Lambda deployment package (zip of build/lambda/). The code is deployed out of band; Terraform ignores later changes. Null (the default) lets the module resolve the committed artifact at path.root/src/lambda.zip (infra-aws/src/lambda.zip)."
   type        = string
-  default     = "../build/lambda.zip"
+  default     = null
+}
+
+variable "lambda_version" {
+  description = "Version of the committed Lambda deployment package (package.json version). Applied as the lambda-version resource tag and exposed as an output so a deploy can be traced back to a build."
+  type        = string
+  default     = "1.0.0"
 }

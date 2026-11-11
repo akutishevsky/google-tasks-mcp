@@ -45,7 +45,8 @@ export class DenoKvStore implements Store {
     return out;
   }
 
-  async close(): Promise<void> {
+  close(): Promise<void> {
     this.kv.close();
+    return Promise.resolve();
   }
 }

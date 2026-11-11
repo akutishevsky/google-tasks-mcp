@@ -1,0 +1,8 @@
+# Copy to terraform.tfvars (git-ignored) and fill in. Never commit real values.
+region               = "<region>"
+issuer_url           = "https://<host>"
+allowed_domain       = "<domain>"
+privacy_policy_url   = "https://<your-site>/privacy"   # optional; /privacy-policy redirects here
+custom_domain        = "<host>"
+enable_custom_domain = false # true once you are ready to create the ACM/DNS records
+lambda_zip_path      = "../build/lambda.zip" # zip of build/lambda/ (npm run build:lambda)

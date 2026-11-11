@@ -1,0 +1,5 @@
+# Copy to backend.hcl (git-ignored), then: terraform init -backend-config=backend.hcl
+bucket         = "<terraform-state-bucket>"
+key            = "google-tasks-mcp/terraform.tfstate"
+region         = "<region>"
+dynamodb_table = "<terraform-lock-table>"

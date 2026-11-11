@@ -14,5 +14,12 @@ infra/.terraform/
 infra/.terraform.lock.hcl
 infra/*.tfstate*
 
+infra-aws/*.tfvars
+!infra-aws/terraform.tfvars.example
+infra-aws/backend.hcl
+infra-aws/.terraform/
+infra-aws/.terraform.lock.hcl
+infra-aws/*.tfstate*
+
 # Google OAuth client downloads (credentials go to Secret Manager, never git)
 client_secret_*.json

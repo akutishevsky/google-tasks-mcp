@@ -51,18 +51,18 @@ All through natural conversation with Claude or any other MCP-compatible client.
 
 ## Deployment Modes
 
-The same server runs in three modes. Pick one by where it runs and who uses it;
+The same server runs in four modes. Pick one by where it runs and who uses it;
 the MCP tools and the OAuth flow are identical in all of them.
 
-| | Deno Deploy | Node / container | Google Cloud (shared) |
-|---|---|---|---|
-| **Best for** | The hosted server; quick personal instance | Self-hosting anywhere that runs Node or Docker | A team on one Google Workspace domain |
-| **Runtime** | Deno Deploy (`build/index.js`) | Node 22 (`npm start`) or the `Dockerfile` | Cloud Run, scales to zero |
-| **Storage** | Deno KV (managed) | Deno KV file (`KV_PATH`) | Firestore (`STORAGE=firestore`) |
-| **Token encryption** | AES-256-GCM, `ENCRYPTION_SECRET` | AES-256-GCM, `ENCRYPTION_SECRET` | Cloud KMS (`CIPHER=gcpkms`), key rotated every 90 days |
-| **Who can sign in** | Any Google account | Any Google account, or one domain (`ALLOWED_DOMAIN`) | One Workspace domain (Internal consent screen + `ALLOWED_DOMAIN`) |
-| **Set up with** | [Step 4](#deploy-to-deno-deploy) | [Step 4](#run-on-node--in-a-container) | [DEPLOY.md](DEPLOY.md) (Terraform in `infra/`) |
-| **Operate with** | Deno Deploy dashboard | [MAINTAIN.md](MAINTAIN.md) | [MAINTAIN.md](MAINTAIN.md), incl. `npm run revoke` |
+| | Deno Deploy | Node / container | Google Cloud (shared) | AWS (serverless) |
+|---|---|---|---|---|
+| **Best for** | The hosted server; quick personal instance | Self-hosting anywhere that runs Node or Docker | A team on one Google Workspace domain | A team on AWS |
+| **Runtime** | Deno Deploy (`build/index.js`) | Node 22 (`npm start`) or the `Dockerfile` | Cloud Run, scales to zero | Lambda (Node 22) behind an API Gateway HTTP API, scales to zero |
+| **Storage** | Deno KV (managed) | Deno KV file (`KV_PATH`) | Firestore (`STORAGE=firestore`) | DynamoDB (`STORAGE=dynamodb`) |
+| **Token encryption** | AES-256-GCM, `ENCRYPTION_SECRET` | AES-256-GCM, `ENCRYPTION_SECRET` | Cloud KMS (`CIPHER=gcpkms`), key rotated every 90 days | AWS KMS (`CIPHER=awskms`), key rotation on |
+| **Who can sign in** | Any Google account | Any Google account, or one domain (`ALLOWED_DOMAIN`) | One Workspace domain (Internal consent screen + `ALLOWED_DOMAIN`) | One domain (`ALLOWED_DOMAIN`) |
+| **Set up with** | [Step 4](#deploy-to-deno-deploy) | [Step 4](#run-on-node--in-a-container) | [DEPLOY.md](DEPLOY.md) (Terraform in `infra/`) | [DEPLOY.aws.md](DEPLOY.aws.md) (Terraform in `infra-aws/`) |
+| **Operate with** | Deno Deploy dashboard | [MAINTAIN.md](MAINTAIN.md) | [MAINTAIN.md](MAINTAIN.md), incl. `npm run revoke` | [MAINTAIN.md](MAINTAIN.md), incl. `npm run revoke` |
 
 Every setting beyond the original ones is optional: with only the variables in
 the [reference](#environment-variables-reference) set, the server behaves as it

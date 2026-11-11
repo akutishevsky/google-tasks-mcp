@@ -2,6 +2,7 @@ import type { Config } from "./config.ts";
 import type { TokenCipher } from "./crypto/cipher.ts";
 import { StaticCipher } from "./crypto/static.ts";
 import type { KmsClientLike } from "./crypto/kms.ts";
+import type { AwsKmsClientLike } from "./crypto/awskms.ts";
 import { DenoKvStore } from "./store/denokv.ts";
 import type { Clock, Store } from "./store/store.ts";
 
@@ -21,6 +22,11 @@ async function buildStore(config: Config, clock: Clock): Promise<Store> {
     const { FirestoreStore } = await import("./store/firestore.ts");
     return new FirestoreStore(new Firestore({ databaseId: config.firestoreDatabase }), clock);
   }
+  if (config.storage === "dynamodb") {
+    const { DynamoDBClient } = await import("@aws-sdk/client-dynamodb");
+    const { DynamoDbStore } = await import("./store/dynamodb.ts");
+    return new DynamoDbStore(new DynamoDBClient({ region: config.awsRegion }), config.dynamoDbTable!, clock);
+  }
   return await DenoKvStore.open({ path: config.kvPath, clock });
 }
 
@@ -29,6 +35,16 @@ async function buildCipher(config: Config): Promise<TokenCipher> {
     const { KeyManagementServiceClient } = await import("@google-cloud/kms");
     const { KmsCipher } = await import("./crypto/kms.ts");
     return new KmsCipher(new KeyManagementServiceClient() as unknown as KmsClientLike, config.kmsKeyName!);
+  }
+  if (config.cipher === "awskms") {
+    const { KMSClient, EncryptCommand, DecryptCommand } = await import("@aws-sdk/client-kms");
+    const { AwsKmsCipher } = await import("./crypto/awskms.ts");
+    const client = new KMSClient({ region: config.awsRegion });
+    const adapter: AwsKmsClientLike = {
+      encrypt: (req) => client.send(new EncryptCommand(req)),
+      decrypt: (req) => client.send(new DecryptCommand(req)),
+    };
+    return new AwsKmsCipher(adapter, config.awsKmsKeyId!);
   }
   return new StaticCipher(config.encryptionSecret!);
 }

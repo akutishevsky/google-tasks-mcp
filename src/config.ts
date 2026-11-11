@@ -10,12 +10,16 @@ export interface OAuthConfig {
 export interface Config {
   google: OAuthConfig;
   issuerUrl?: string;
-  storage: "denokv" | "firestore";
+  storage: "denokv" | "firestore" | "dynamodb";
   kvPath?: string;
   firestoreDatabase?: string;
-  cipher: "static" | "gcpkms";
+  dynamoDbTable?: string;
+  cipher: "static" | "gcpkms" | "awskms";
   encryptionSecret?: string;
   kmsKeyName?: string;
+  awsKmsKeyId?: string;
+  awsRegion?: string;
+  googleOAuthSecretId?: string;
   allowedDomain?: string;
   allowedRedirectUris?: string[];
   trustProxyHops?: number;
@@ -116,8 +120,8 @@ function proxyHops(env: Env): number | undefined {
 }
 
 export function loadConfig(env: Env): Config {
-  const storage = oneOf(env, "STORAGE", ["denokv", "firestore"] as const, "denokv");
-  const cipher = oneOf(env, "CIPHER", ["static", "gcpkms"] as const, "static");
+  const storage = oneOf(env, "STORAGE", ["denokv", "firestore", "dynamodb"] as const, "denokv");
+  const cipher = oneOf(env, "CIPHER", ["static", "gcpkms", "awskms"] as const, "static");
 
   const encryptionSecret = opt(env, "ENCRYPTION_SECRET");
   if (cipher === "static") {
@@ -126,9 +130,15 @@ export function loadConfig(env: Env): Config {
   }
   const kmsKeyName = opt(env, "KMS_KEY_NAME");
   if (cipher === "gcpkms" && !kmsKeyName) throw new ConfigError("KMS_KEY_NAME is required when CIPHER=gcpkms");
+  const awsKmsKeyId = opt(env, "AWS_KMS_KEY_ID");
+  if (cipher === "awskms" && !awsKmsKeyId) throw new ConfigError("AWS_KMS_KEY_ID is required when CIPHER=awskms");
   const firestoreDatabase = opt(env, "FIRESTORE_DATABASE");
   if (storage === "firestore" && !firestoreDatabase) {
     throw new ConfigError("FIRESTORE_DATABASE is required when STORAGE=firestore");
+  }
+  const dynamoDbTable = opt(env, "DYNAMODB_TABLE");
+  if (storage === "dynamodb" && !dynamoDbTable) {
+    throw new ConfigError("DYNAMODB_TABLE is required when STORAGE=dynamodb");
   }
 
   const port = Number(opt(env, "PORT") ?? "3000");
@@ -144,9 +154,13 @@ export function loadConfig(env: Env): Config {
     storage,
     kvPath: opt(env, "KV_PATH"),
     firestoreDatabase,
+    dynamoDbTable,
     cipher,
     encryptionSecret: cipher === "static" ? encryptionSecret : undefined,
     kmsKeyName,
+    awsKmsKeyId,
+    awsRegion: opt(env, "AWS_REGION"),
+    googleOAuthSecretId: opt(env, "GOOGLE_OAUTH_SECRET_ID"),
     allowedDomain: opt(env, "ALLOWED_DOMAIN")?.toLowerCase(),
     allowedRedirectUris: redirectAllowlist(env),
     trustProxyHops: proxyHops(env),

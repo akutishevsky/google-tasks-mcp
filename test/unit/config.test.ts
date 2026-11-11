@@ -43,6 +43,22 @@ describe("loadConfig", () => {
     expect(loadConfig({ ...base, STORAGE: "firestore", FIRESTORE_DATABASE: "db" }).firestoreDatabase).toBe("db");
   });
 
+  it("dynamodb_requires_table", () => {
+    expect(() => loadConfig({ ...base, STORAGE: "dynamodb" })).toThrow(/DYNAMODB_TABLE/);
+    expect(loadConfig({ ...base, STORAGE: "dynamodb", DYNAMODB_TABLE: "tbl" }).dynamoDbTable).toBe("tbl");
+  });
+
+  it("awskms_requires_key", () => {
+    expect(() => loadConfig({ ...base, CIPHER: "awskms" })).toThrow(/AWS_KMS_KEY_ID/);
+    expect(loadConfig({ ...base, CIPHER: "awskms", AWS_KMS_KEY_ID: "arn:aws:kms:eu-west-1:111122223333:key/abcd" }).cipher).toBe("awskms");
+  });
+
+  it("awskms_does_not_need_static_secret", () => {
+    const c = loadConfig({ ...base, ENCRYPTION_SECRET: undefined, CIPHER: "awskms", AWS_KMS_KEY_ID: "k" });
+    expect(c.encryptionSecret).toBeUndefined();
+    expect(c.awsKmsKeyId).toBe("k");
+  });
+
   it("issuer_url_must_be_https_or_localhost", () => {
     expect(() => loadConfig({ ...base, ISSUER_URL: "http://tasks.example.com" })).toThrow(/ISSUER_URL/);
     expect(() => loadConfig({ ...base, ISSUER_URL: "not a url" })).toThrow(/ISSUER_URL/);

@@ -52,7 +52,11 @@ module "lambda" {
     }
   }
 
-  # Let API Gateway invoke the function.
+  # Let API Gateway invoke the function. The permission targets the unversioned
+  # function: we do not publish versions (publish = false), so pinning the
+  # trigger to a published version would point at $LATEST, which AWS rejects
+  # ("We currently do not support adding policies for $LATEST").
+  create_current_version_allowed_triggers = false
   allowed_triggers = {
     APIGateway = {
       service    = "apigateway"

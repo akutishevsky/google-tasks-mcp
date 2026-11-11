@@ -83,6 +83,16 @@ aws lambda update-function-code --function-name "$FN" --zip-file fileb://build/l
 Terraform ignores the function code after creation, so `aws lambda
 update-function-code` (or CI) owns rollouts. The handler is `index.handler`.
 
+The bundle marks `@aws-sdk/*`, `@deno/kv` and `@google-cloud/*` as external:
+the AWS SDK v3 is provided by the `nodejs22.x` runtime, and the other two are
+only ever loaded by a backend the AWS deployment does not use (`denokv` /
+`firestore` / `gcpkms`). Every backend is imported lazily (`await import`) when
+its `STORAGE`/`CIPHER` is selected, so with `STORAGE=dynamodb` and
+`CIPHER=awskms` none of those packages is loaded at all. This matters for
+`@deno/kv` in particular: it ships a native `.node` binding that cannot be
+bundled, so it must stay external and lazy — otherwise the function crashes at
+cold start with `ERR_MODULE_NOT_FOUND`.
+
 ## 4. Custom hostname
 
 Set `enable_custom_domain = true`. Use the custom hostname from day one: the

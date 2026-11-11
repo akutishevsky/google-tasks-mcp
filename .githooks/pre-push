@@ -2,90 +2,51 @@
 #
 # pre-push hook: ensure the committed Lambda artifact is in sync with src/.
 #
-# If any tracked file under src/ is part of the push range, we rebuild the
-# esbuild bundle into a temp location and compare the SHA-256 of the fresh
-# index.mjs against the index.mjs extracted from the committed
-# infra-aws/src/lambda.zip. We compare the extracted bundle CONTENT rather than
-# the raw zip bytes, because a zip archive embeds file mtimes and would differ
-# even when the bundle is byte-identical.
+# If any tracked file under src/ is part of the push range, rebuild the bundle
+# with `npm run build:lambda:zip` and compare the freshly built bundle against
+# the bundle inside the COMMITTED zip (read from the pushed commit, not the
+# working tree). We compare the extracted index.mjs CONTENT, not raw zip bytes,
+# because a zip embeds file mtimes and would differ even when byte-identical.
+# The working-tree zip is restored afterwards so the hook leaves no changes.
 #
-# Exit 1 (blocking the push) when src/ changed but the committed zip is stale
-# or missing; exit 0 otherwise.
+# Exit 1 (blocking the push) when src/ changed but the committed zip is stale or
+# missing; exit 0 otherwise.
 
 set -euo pipefail
 
-# Resolve the repository root so the hook works regardless of CWD.
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
 ZIP_PATH="infra-aws/src/lambda.zip"
-
-# Temp dirs, cleaned up on any exit.
-TMP_BUILD="$(mktemp -d)"
-TMP_ZIP="$(mktemp -d)"
-cleanup() {
-  rm -rf "$TMP_BUILD" "$TMP_ZIP"
-}
-trap cleanup EXIT
-
 ZERO_OID="0000000000000000000000000000000000000000"
 
-# Collect every file touched in the push range, across all ref updates.
-# Git feeds pre-push one line per ref on stdin:
-#   <local ref> <local oid> <remote ref> <remote oid>
+# Find the tip commit of the push range, and whether src/ changed in it.
 src_changed=0
+tip_oid=""
 while read -r local_ref local_oid remote_ref remote_oid; do
-  # Skip deletions of a remote ref (local oid is all zeros).
-  if [ "$local_oid" = "$ZERO_OID" ]; then
-    continue
-  fi
-
+  [ "$local_oid" = "$ZERO_OID" ] && continue # ref deletion
+  tip_oid="$local_oid"
   if [ "$remote_oid" = "$ZERO_OID" ]; then
-    # New branch on the remote: inspect everything reachable from local_oid.
     changed="$(git diff --name-only "$local_oid")"
   else
     changed="$(git diff --name-only "$remote_oid".."$local_oid")"
   fi
-
-  if printf '%s\n' "$changed" | grep -q '^src/'; then
-    src_changed=1
-  fi
+  printf '%s\n' "$changed" | grep -q '^src/' && src_changed=1
 done
 
-# No src/ change in the push range: nothing to enforce.
-if [ "$src_changed" -eq 0 ]; then
-  exit 0
-fi
+[ "$src_changed" -eq 0 ] && exit 0
 
 echo "pre-push: src/ changed; verifying $ZIP_PATH is up to date..."
 
-# Resolve the esbuild binary. Prefer the project-local install (git invokes
-# hooks without npm's node_modules/.bin on PATH), fall back to a PATH lookup.
-if [ -x "node_modules/.bin/esbuild" ]; then
-  ESBUILD="node_modules/.bin/esbuild"
-elif command -v esbuild >/dev/null 2>&1; then
-  ESBUILD="esbuild"
-else
-  echo "pre-push: esbuild not found (looked in node_modules/.bin and PATH); run 'npm install'."
-  exit 1
-fi
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"; git checkout -- "$ZIP_PATH" 2>/dev/null || true' EXIT
 
-# Build the bundle with the same flags as `npm run build:lambda`, but to a temp
-# outfile so we never touch the working tree.
-"$ESBUILD" src/lambda.ts \
-  --bundle \
-  --platform=node \
-  --target=node22 \
-  --format=esm \
-  --outfile="$TMP_BUILD/index.mjs" \
-  --external:@aws-sdk/* \
-  --external:@deno/kv \
-  --external:@google-cloud/*
+bundle_hash() { unzip -p "$1" index.mjs 2>/dev/null | shasum -a 256 | awk '{print $1}'; }
 
 stale_message() {
   cat <<EOF
 pre-push: the committed $ZIP_PATH is stale (it does not match the current src/).
-Rebuild the Lambda artifact before pushing:
+Rebuild and commit the Lambda artifact before pushing:
 
   npm run build:lambda:zip
   git add $ZIP_PATH
@@ -94,34 +55,27 @@ then re-commit and push again.
 EOF
 }
 
-# The committed zip must exist.
-if [ ! -f "$ZIP_PATH" ]; then
-  echo "pre-push: $ZIP_PATH is missing."
+# The committed artifact, read from the commit being pushed (falls back to HEAD).
+ref="${tip_oid:-HEAD}"
+if ! git cat-file -e "${ref}:${ZIP_PATH}" 2>/dev/null; then
+  echo "pre-push: $ZIP_PATH is not committed in the pushed range."
   stale_message
   exit 1
 fi
+git show "${ref}:${ZIP_PATH}" > "$TMP/committed.zip"
+committed_hash="$(bundle_hash "$TMP/committed.zip")"
 
-# Extract only index.mjs from the committed zip for a content comparison.
-if ! unzip -o "$ZIP_PATH" index.mjs -d "$TMP_ZIP" >/dev/null 2>&1; then
-  echo "pre-push: could not extract index.mjs from $ZIP_PATH."
-  stale_message
+# The source of truth: rebuild from the current src/ and hash the fresh bundle.
+if ! npm run --silent build:lambda:zip >/dev/null 2>&1; then
+  echo "pre-push: 'npm run build:lambda:zip' failed; run it manually and fix the error."
   exit 1
 fi
+fresh_hash="$(bundle_hash "$ZIP_PATH")"
 
-if [ ! -f "$TMP_ZIP/index.mjs" ]; then
-  echo "pre-push: $ZIP_PATH does not contain index.mjs."
-  stale_message
-  exit 1
-fi
-
-# Compare only the hash digits (the first field of shasum output).
-fresh_hash="$(shasum -a 256 "$TMP_BUILD/index.mjs" | awk '{print $1}')"
-committed_hash="$(shasum -a 256 "$TMP_ZIP/index.mjs" | awk '{print $1}')"
-
-if [ "$fresh_hash" != "$committed_hash" ]; then
+if [ "$committed_hash" != "$fresh_hash" ]; then
   echo "pre-push: bundle hash mismatch."
-  echo "  fresh index.mjs:     $fresh_hash"
-  echo "  committed in zip:    $committed_hash"
+  echo "  committed in zip: ${committed_hash:-<none>}"
+  echo "  freshly built:    $fresh_hash"
   stale_message
   exit 1
 fi

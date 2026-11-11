@@ -280,6 +280,49 @@ For a shared, multi-user server restricted to a Google Workspace domain, see
 (configuration, token model, revoking access). All new settings are optional;
 without them the server behaves as before.
 
+#### Deploy to AWS (Lambda + API Gateway + DynamoDB + KMS)
+
+For a serverless instance on AWS, see [DEPLOY.aws.md](DEPLOY.aws.md) (runbook)
+and [MAINTAIN.md](MAINTAIN.md). The Terraform lives in `infra-aws/` as a **thin
+root plus a reusable child module**; `infra-aws/README.md` documents both uses
+in full.
+
+**Deploy the bundled root directly:**
+
+```bash
+cd infra-aws
+cp terraform.tfvars.example terraform.tfvars   # region, issuer_url, custom_domain, route53_zone_id, ...
+cp backend.hcl.example backend.hcl             # S3 state bucket + lock
+terraform init -backend-config=backend.hcl
+terraform apply -var-file=terraform.tfvars
+```
+
+**Or reference the child module from your own Terraform** (your root supplies
+its own backend and provider; the module declares neither). Pin a tag, branch or
+commit with `?ref=`:
+
+```hcl
+module "google_tasks_mcp" {
+  source = "github.com/akutishevsky/google-tasks-mcp//infra-aws/modules/google-tasks-mcp?ref=<ref>"
+
+  issuer_url           = "https://tasks.example.com"
+  custom_domain        = "tasks.example.com"
+  enable_custom_domain = true
+  route53_zone_id      = "Z0123456789ABCDEFGHIJ"  # when the zone is in your account
+  # allowed_domain, allowed_redirect_uris, public_pages, lambda_version, ... see infra-aws/modules/google-tasks-mcp/variables.tf
+}
+
+provider "aws" {
+  region = "eu-west-1"   # the module has no region input; it uses your provider
+}
+```
+
+The Lambda code is a prebuilt, committed artifact (`infra-aws/src/lambda.zip`),
+so `terraform apply` never builds it. Rebuild it with `npm run build:lambda:zip`
+before pushing a source change; a `pre-push` hook enforces this (enable once with
+`git config core.hooksPath .githooks`). Details in
+[`infra-aws/README.md`](infra-aws/README.md).
+
 ### Step 5: Update Google OAuth Settings
 
 Go back to your Google Cloud Console OAuth client and update the redirect URI to match your deployed URL:

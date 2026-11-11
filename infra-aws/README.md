@@ -83,9 +83,7 @@ first — the build is **not** delegated to whoever applies the module. Before
 every push that touches `src/`:
 
 ```bash
-npm run build:lambda
-(cd build/lambda && zip -r ../lambda.zip .)
-cp build/lambda.zip infra-aws/src/lambda.zip
+npm run build:lambda:zip   # builds the bundle and writes infra-aws/src/lambda.zip
 git add infra-aws/src/lambda.zip
 ```
 

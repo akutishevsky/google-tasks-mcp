@@ -1,6 +1,6 @@
 {
   "name": "google-tasks-mcp",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "MCP server for Google Tasks API integration",
   "type": "module",
   "main": "build/index.js",

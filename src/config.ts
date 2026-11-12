@@ -19,7 +19,6 @@ export interface Config {
   kmsKeyName?: string;
   awsKmsKeyId?: string;
   awsRegion?: string;
-  googleOAuthSecretId?: string;
   allowedDomain?: string;
   allowedRedirectUris?: string[];
   trustProxyHops?: number;
@@ -160,7 +159,6 @@ export function loadConfig(env: Env): Config {
     kmsKeyName,
     awsKmsKeyId,
     awsRegion: opt(env, "AWS_REGION"),
-    googleOAuthSecretId: opt(env, "GOOGLE_OAUTH_SECRET_ID"),
     allowedDomain: opt(env, "ALLOWED_DOMAIN")?.toLowerCase(),
     allowedRedirectUris: redirectAllowlist(env),
     trustProxyHops: proxyHops(env),

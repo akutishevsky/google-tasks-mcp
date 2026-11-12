@@ -48,7 +48,7 @@ supplies its own backend and provider** — the child declares neither:
 
 ```hcl
 module "google_tasks_mcp" {
-  source = "github.com/franc-liuzzi/google-tasks-mcp//infra-aws/modules/google-tasks-mcp?ref=<ref>"
+  source = "github.com/akutishevsky/google-tasks-mcp//infra-aws/modules/google-tasks-mcp?ref=<ref>"
 
   region        = "eu-west-1"   # provider config stays in YOUR root
   issuer_url    = "https://tasks.example.com"
@@ -60,44 +60,23 @@ Note the `//` before the subdirectory and the `?ref=<ref>` pin. The child module
 has no `region` input — the AWS region comes from the **provider** you configure
 in your own root, along with your own `backend` block.
 
-## Lambda package: the committed zip
+## Lambda package
 
-The Lambda code is a **prebuilt, committed artifact**: the zip is not built by
-Terraform at apply time. The default package is **`infra-aws/src/lambda.zip`**,
-tracked in the repo. The module sets `create_package = false` and
+The Lambda code is not committed and Terraform does not build it. Build it
+first with `npm run build:lambda:zip`, which writes **`build/lambda.zip`**
+(`build/` is gitignored). The module sets `create_package = false` and
 `local_existing_package` to that zip, and tracks its `source_code_hash`: when
-the committed zip changes, `terraform apply` updates the function code. Rebuild
-and commit the zip (`npm run build:lambda:zip`), then apply.
+the zip changes, `terraform apply` updates the function code. To deploy a new
+version, pull, rebuild the zip, then apply.
 
 - **`lambda_zip_path`** (default `null`) — when left null, the module resolves
-  the committed artifact at `path.module/../../src/lambda.zip` (that is,
-  `infra-aws/src/lambda.zip`). Override it to point at a different zip.
+  `build/lambda.zip` at the repo root (`path.module/../../../build/lambda.zip`).
+  A project that references the child module remotely must set it to a zip it
+  built from a checkout of this repo.
 - **`lambda_version`** — when deploying the root, it defaults to the `version`
   read from the repo-root `package.json` (no manual step); override it with an
-  explicit value (e.g. a CI `git describe`). The default tracks the release:
-  it is bumped with `npm version` (see MAINTAIN.md "Releasing"). The child
-  module, used remotely without the repo root, keeps a static `1.0.0` default.
-  Recorded
-  as the `lambda-version` resource tag on the Lambda and re-exposed as the
+  explicit value (e.g. a CI `git describe`). The child module, used
+  remotely without the repo root, keeps a static `1.0.0` default. Recorded as
+  the `lambda-version` resource tag on the Lambda and re-exposed as the
   `lambda_version` **output**, so a deployed function can be traced back to the
   build it came from.
-
-## Build before every push (enforced by a pre-push hook)
-
-Whoever commits, pushes and tags is responsible for rebuilding the committed zip
-first — the build is **not** delegated to whoever applies the module. Before
-every push that touches `src/`:
-
-```bash
-npm run build:lambda:zip   # builds the bundle and writes infra-aws/src/lambda.zip
-git add infra-aws/src/lambda.zip
-```
-
-A `pre-push` hook in [`../.githooks/pre-push`](../.githooks/pre-push) enforces
-this: if the push range touches `src/`, it rebuilds the bundle and blocks the
-push when `infra-aws/src/lambda.zip` is stale or missing. Enable the hooks once
-per clone:
-
-```bash
-git config core.hooksPath .githooks
-```

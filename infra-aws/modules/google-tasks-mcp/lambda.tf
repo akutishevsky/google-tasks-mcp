@@ -10,10 +10,10 @@ module "lambda" {
   timeout       = 30
   memory_size   = 512
 
-  # Code is built out of band (npm run build:lambda:zip) into the committed
-  # artifact. Terraform tracks that zip: when its source_code_hash changes, a
-  # terraform apply updates the function code. Rebuild and commit the zip, then
-  # apply, to deploy a new version.
+  # Code is built out of band (npm run build:lambda:zip -> build/lambda.zip).
+  # Terraform tracks that zip: when its source_code_hash changes, a terraform
+  # apply updates the function code. Rebuild the zip, then apply, to deploy a
+  # new version.
   create_package         = false
   local_existing_package = local.lambda_zip_path
 

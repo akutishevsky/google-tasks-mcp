@@ -1,10 +1,10 @@
 locals {
   name = var.service_name
 
-  # Default lambda_zip_path to the committed artifact alongside this module
-  # (infra-aws/src/lambda.zip). path.module cannot be used in a variable
+  # Default lambda_zip_path to the local build output at the repo root
+  # (build/lambda.zip, from npm run build:lambda:zip). path.module cannot be used in a variable
   # default, so the default is null and resolved here.
-  lambda_zip_path = coalesce(var.lambda_zip_path, "${path.module}/../../src/lambda.zip")
+  lambda_zip_path = coalesce(var.lambda_zip_path, "${path.module}/../../../build/lambda.zip")
 
   # The Lambda execution role name is fixed so the KMS key policy can grant it
   # Encrypt/Decrypt without creating a kms <-> lambda module cycle.

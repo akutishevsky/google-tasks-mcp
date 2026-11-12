@@ -1,5 +1,3 @@
-.agents/
-.kiro/
 node_modules/
 build/
 .env

@@ -317,10 +317,9 @@ provider "aws" {
 }
 ```
 
-The Lambda code is a prebuilt, committed artifact (`infra-aws/src/lambda.zip`),
-so `terraform apply` never builds it. Rebuild it with `npm run build:lambda:zip`
-before pushing a source change; a `pre-push` hook enforces this (enable once with
-`git config core.hooksPath .githooks`). Details in
+Terraform does not build the Lambda code. Run `npm run build:lambda:zip`
+(writes `build/lambda.zip`) before every `terraform apply`; when referencing the
+child module remotely, point `lambda_zip_path` at that zip. Details in
 [`infra-aws/README.md`](infra-aws/README.md).
 
 ### Step 5: Update Google OAuth Settings

@@ -4,11 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Google Tasks MCP Server — an open-source Model Context Protocol server that lets AI assistants manage Google Tasks through natural language. Built with Hono, MCP SDK, and Deno KV. Runs on Deno Deploy, Node, or Cloud Run (Firestore + KMS; see `DEPLOY.md`).
+Google Tasks MCP Server — an open-source Model Context Protocol server that lets AI assistants manage Google Tasks through natural language. Built with Hono, MCP SDK, and Deno KV. Runs on Deno Deploy, Node, Cloud Run (Firestore + KMS; see `DEPLOY.md`), or AWS Lambda (DynamoDB + AWS KMS; see `DEPLOY.aws.md`, Terraform in `infra-aws/`).
 
 ## Commands
 
 - **Build**: `npm run build` (runs `tsc`)
+- **Build Lambda bundle**: `npm run build:lambda:zip` (esbuild → `build/lambda.zip`; not committed, build before `terraform apply`)
 - **Dev (watch)**: `npm run dev` (runs `tsc --watch`)
 - **Lint**: `deno lint` (configured in `deno.json`, targets `src/`)
 - **Run**: `deno task dev` (`deno serve` on :3000, `build/index.js`; `@deno/kv` needs `--allow-ffi`/`--allow-sys`) or `npm start` (Node, `build/node.js`; set `KV_PATH`)
@@ -22,10 +23,11 @@ Google Tasks MCP Server — an open-source Model Context Protocol server that le
 
 ### Entry Points & Runtime
 
-- `src/config.ts` — `loadConfig(env)`: the only place env vars are interpreted (the logger's `LOG_LEVEL` aside). Fails fast on invalid combinations.
-- `src/deps.ts` — `buildDeps(config)`: builds the injected `AppDeps` (`store`, `cipher`, `clock`, `config`, `fetch`). Firestore/KMS SDKs are optional and imported lazily.
+- `src/config.ts` — `loadConfig(env)`: the only place env vars are interpreted (the logger's `LOG_LEVEL` aside, and `src/lambda.ts`, which reads `GOOGLE_OAUTH_SECRET_ID`/`AWS_REGION` to fetch the OAuth client before `loadConfig` runs). Fails fast on invalid combinations.
+- `src/deps.ts` — `buildDeps(config)`: builds the injected `AppDeps` (`store`, `cipher`, `clock`, `config`, `fetch`). Firestore/GCP KMS/AWS SDKs (and `@deno/kv`) are optional and imported lazily.
 - `src/index.ts` — Deno Deploy: exports `{ fetch: app.fetch }`.
 - `src/node.ts` — Node/containers/Cloud Run: serves the app with `@hono/node-server` on `PORT`.
+- `src/lambda.ts` — AWS Lambda (`@hono/aws-lambda`): at cold start loads `{client_id, client_secret}` from Secrets Manager into `process.env`, then builds the app.
 - `src/cli/revoke.ts` — `npm run revoke` kill switch.
 
 ### Request Flow
@@ -42,8 +44,8 @@ Client → Hono HTTP (app.ts) → Security headers middleware → CORS middlewar
 
 ### Key Modules
 
-- **`src/store/`** — `Store` interface (`get/set ttl/delete/take/list`), values wrapped `{ v, expiresAt }` and checked against the injected clock. `DenoKvStore` (default; **in memory on Node unless `KV_PATH`**) and `FirestoreStore`.
-- **`src/crypto/`** — `TokenCipher`: `StaticCipher` (upstream AES-256-GCM format, key derived once) and `KmsCipher` (Cloud KMS per token).
+- **`src/store/`** — `Store` interface (`get/set ttl/delete/take/list`), values wrapped `{ v, expiresAt }` and checked against the injected clock. `DenoKvStore` (default; **in memory on Node unless `KV_PATH`**) `FirestoreStore` and `DynamoDbStore`.
+- **`src/crypto/`** — `TokenCipher`: `StaticCipher` (upstream AES-256-GCM format, key derived once), `KmsCipher` (Cloud KMS per token) and `AwsKmsCipher` (AWS KMS per token).
 - **`src/auth/token-store.ts`** — Grants (encrypted Google tokens, email) plus 1 h access / 30 d rotating refresh tokens, keyed by SHA-256 hash; reuse after a 60 s grace revokes the grant.
 - **`src/auth/oauth.ts`** — OAuth 2.1 + PKCE. `/authorize` validates client and redirect (400, never redirects). Google code is exchanged at `/callback` (id_token → email; `ALLOWED_DOMAIN` check). `/token` handles `authorization_code` and `refresh_token`.
 - **`src/google/client.ts`** — `GoogleClient` seam and the per-app token provider (Google refresh 60 s early, 5-minute decrypted-token cache; Google `invalid_grant` revokes the grant → 401).

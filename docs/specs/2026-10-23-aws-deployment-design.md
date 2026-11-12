@@ -198,19 +198,15 @@ only** and calls the reusable child module at
 root stays deployable standalone (`terraform init -backend-config=backend.hcl`,
 `terraform apply -var-file=terraform.tfvars`); another project can instead
 reference the child directly with a Git source and a pinned `?ref=`
-(`source = "github.com/franc-liuzzi/google-tasks-mcp//infra-aws/modules/google-tasks-mcp?ref=<ref>"`),
+(`source = "github.com/akutishevsky/google-tasks-mcp//infra-aws/modules/google-tasks-mcp?ref=<ref>"`),
 supplying its own backend and provider. See `infra-aws/README.md`.
 
-**Committed Lambda zip.** The Lambda package is a prebuilt, committed artifact
-rather than built at apply time: the default is `infra-aws/src/lambda.zip`
-(resolved by the module when `lambda_zip_path` is null), so whoever applies the
-module does not have to build. Whoever pushes rebuilds and copies the zip first;
-a `pre-push` hook (`.githooks/pre-push`, enabled with `git config core.hooksPath
-.githooks`) rebuilds the bundle and blocks the push when the committed zip is
-stale against `src/`. The module tracks the zip's `source_code_hash`, so a
-`terraform apply` with a rebuilt-and-committed zip updates the function code.
-The `lambda_version` input (the `package.json` version, bumped with `npm
-version` — see MAINTAIN.md "Releasing") is written as the `lambda-version`
+**Lambda package.** The Lambda package is a local build output, not a
+committed artifact: `npm run build:lambda:zip` writes `build/lambda.zip`, which
+the module resolves when `lambda_zip_path` is null (a remote caller sets the
+path explicitly). The module tracks the zip's `source_code_hash`, so a
+`terraform apply` after a rebuild updates the function code.
+The `lambda_version` input (default: the `package.json` version) is written as the `lambda-version`
 resource tag on the Lambda and re-exposed as the `lambda_version` output, so a
 deployed function traces back to its build.
 

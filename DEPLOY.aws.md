@@ -31,7 +31,8 @@ terraform init -backend-config=backend.hcl
 terraform apply -var-file=terraform.tfvars -target=module.secret
 ```
 
-Now add the OAuth client credentials (step 2), then come back and apply the rest:
+Now add the OAuth client credentials (step 2), build the Lambda package (step 3),
+then come back and apply the rest:
 
 ```bash
 terraform plan -var-file=terraform.tfvars
@@ -45,10 +46,9 @@ the two-phase apply clean.
 module at `infra-aws/modules/google-tasks-mcp/`, where all the resource logic
 lives. The init/apply commands above are unchanged by this layout — see
 [`infra-aws/README.md`](infra-aws/README.md) for the root-vs-child split and for
-referencing the child module remotely. The default Lambda package is the
-committed artifact `infra-aws/src/lambda.zip` (the module resolves it when
-`lambda_zip_path` is left null); rebuilding it before every push is covered in
-§3.
+referencing the child module remotely. The Lambda package is not committed:
+build it into `build/lambda.zip` (§3) before applying; the root module resolves
+that path when `lambda_zip_path` is left null.
 
 `infra-aws/` is built from the official `terraform-aws-modules/*` registry modules
 (pinned): `dynamodb-table`, `kms`, `secrets-manager`, `lambda`, `apigateway-v2`
@@ -83,31 +83,14 @@ aws secretsmanager put-secret-value --secret-id "$SECRET" \
 
 ```bash
 npm ci
-npm run build:lambda:zip             # builds the bundle and writes infra-aws/src/lambda.zip
-FN=$(terraform -chdir=infra-aws output -raw lambda_function_name)
-aws lambda update-function-code --function-name "$FN" --zip-file fileb://infra-aws/src/lambda.zip
+npm run build:lambda:zip             # builds the bundle and writes build/lambda.zip
+terraform -chdir=infra-aws apply -var-file=terraform.tfvars
 ```
 
-Terraform ignores the function code after creation, so `aws lambda
-update-function-code` (or CI) owns rollouts. The handler is `index.handler`.
-
-> **Build before every push.** The committed `infra-aws/src/lambda.zip` is the
-> default package Terraform deploys, so it must be rebuilt and copied into place
-> before every push or tag that changes `src/`. The build is the responsibility
-> of whoever pushes — it is never delegated to whoever applies the module.
-
-```bash
-npm run build:lambda:zip   # builds the bundle and writes infra-aws/src/lambda.zip
-git add infra-aws/src/lambda.zip
-```
-
-A `pre-push` hook ([`.githooks/pre-push`](.githooks/pre-push)) enforces this: if
-the push range touches `src/`, it rebuilds the bundle and blocks the push when
-`infra-aws/src/lambda.zip` is stale or missing. Enable it once per clone:
-
-```bash
-git config core.hooksPath .githooks
-```
+Terraform tracks the zip's `source_code_hash`, so re-running these commands after
+pulling a new version deploys the new code. The zip is a local build output
+(`build/` is gitignored); build it before every apply. The handler is
+`index.handler`.
 
 The bundle marks `@aws-sdk/*`, `@deno/kv` and `@google-cloud/*` as external:
 the AWS SDK v3 is provided by the `nodejs22.x` runtime, and the other two are

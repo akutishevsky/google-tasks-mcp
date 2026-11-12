@@ -56,13 +56,13 @@ variable "route53_zone_id" {
 }
 
 variable "lambda_zip_path" {
-  description = "Path to the built Lambda deployment package (zip of build/lambda/). Terraform tracks the zip's source_code_hash and updates the function code on apply when it changes. Null (the default) resolves to the committed artifact at path.module/../../src/lambda.zip (infra-aws/src/lambda.zip)."
+  description = "Path to the built Lambda deployment package (zip of build/lambda/). Terraform tracks the zip's source_code_hash and updates the function code on apply when it changes. Null (the default) resolves to build/lambda.zip at the repo root (path.module/../../../build/lambda.zip), written by npm run build:lambda:zip; set it explicitly when referencing this module remotely."
   type        = string
   default     = null
 }
 
 variable "lambda_version" {
-  description = "Version of the committed Lambda deployment package (package.json version). Applied as the lambda-version resource tag and exposed as an output so a deploy can be traced back to a build."
+  description = "Version of the Lambda deployment package (package.json version). Applied as the lambda-version resource tag and exposed as an output so a deploy can be traced back to a build."
   type        = string
   default     = "1.0.0"
 }

@@ -13,6 +13,6 @@ enable_custom_domain = true                        # creates the ACM cert (regio
 # records by hand.
 route53_zone_id = "<hosted-zone-id>"
 
-# lambda_zip_path is intentionally left unset: the module defaults to the
-# committed artifact at infra-aws/src/lambda.zip (resolved via path.module).
+# lambda_zip_path is intentionally left unset: the module defaults to
+# build/lambda.zip at the repo root (run npm run build:lambda:zip first).
 # Set it only to deploy a different prebuilt zip.

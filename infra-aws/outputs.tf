@@ -34,6 +34,6 @@ output "lambda_function_name" {
 }
 
 output "lambda_version" {
-  description = "Version of the committed Lambda deployment package (matches the lambda-version tag)."
+  description = "Version of the Lambda deployment package (matches the lambda-version tag)."
   value       = module.google-tasks-mcp.lambda_version
 }

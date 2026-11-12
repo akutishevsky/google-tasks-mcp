@@ -1,6 +1,6 @@
 {
   "name": "google-tasks-mcp",
-  "version": "1.0.3",
+  "version": "1.0.0",
   "description": "MCP server for Google Tasks API integration",
   "type": "module",
   "main": "build/index.js",
@@ -14,7 +14,7 @@
     "start": "node build/node.js",
     "revoke": "node build/cli/revoke.js",
     "build:lambda": "esbuild src/lambda.ts --bundle --platform=node --target=node22 --format=esm --outfile=build/lambda/index.mjs --external:@aws-sdk/* --external:@deno/kv --external:@google-cloud/*",
-    "build:lambda:zip": "npm run build:lambda && rm -f infra-aws/src/lambda.zip && mkdir -p infra-aws/src && cd build/lambda && zip -qr ../../infra-aws/src/lambda.zip ."
+    "build:lambda:zip": "npm run build:lambda && rm -f build/lambda.zip && cd build/lambda && zip -qr ../lambda.zip ."
   },
   "keywords": [
     "mcp",

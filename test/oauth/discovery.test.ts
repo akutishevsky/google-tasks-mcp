@@ -18,7 +18,7 @@ describe("discovery", () => {
     expect(as.grant_types_supported).toContain("refresh_token");
     expect(as.grant_types_supported).toContain("authorization_code");
     expect(as.response_types_supported).toEqual(["code"]);
-    expect(as.token_endpoint_auth_methods_supported).toEqual(["none", "client_secret_post"]);
+    expect(as.token_endpoint_auth_methods_supported).toEqual(["none"]);
     expect(as.mcp_endpoint).toBe(`${BASE}/mcp`);
 
     for (const p of PRM_PATHS) {

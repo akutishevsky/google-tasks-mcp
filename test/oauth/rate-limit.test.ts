@@ -16,9 +16,9 @@ describe("rate limit", () => {
     for (let i = 0; i < 31; i++) {
       statuses.push((await req(s.app, "/register", registerFrom(`10.0.0.${i}, 203.0.113.7`))).status);
     }
-    expect(statuses.slice(0, 30).every((st) => st === 200)).toBe(true);
+    expect(statuses.slice(0, 30).every((st) => st === 201)).toBe(true);
     expect(statuses[30]).toBe(429);
     // A different real client is not affected.
-    expect((await req(s.app, "/register", registerFrom("10.0.0.1, 198.51.100.9"))).status).toBe(200);
+    expect((await req(s.app, "/register", registerFrom("10.0.0.1, 198.51.100.9"))).status).toBe(201);
   });
 });

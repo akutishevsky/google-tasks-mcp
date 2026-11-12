@@ -32,8 +32,26 @@ describe("/register validation (review #4)", () => {
     const s = await startTestServer();
     for (const uri of ["https://a.example/cb", "http://localhost:8765/callback", "http://127.0.0.1:33418/", "http://[::1]:5000/cb"]) {
       const r = await registerRaw(s, JSON.stringify({ redirect_uris: [uri] }));
-      expect(r.status, uri).toBe(200);
+      expect(r.status, uri).toBe(201);
     }
+  });
+
+  // RFC 7591 §3.2.1: 201 Created with the full client metadata echoed back.
+  // A missing/incomplete body here makes strict DCR clients (e.g. Amazon Quick's
+  // "default OAuth app") reject the registration.
+  it("register_returns_rfc7591_body", async () => {
+    const s = await startTestServer();
+    const r = await registerRaw(s, JSON.stringify({ redirect_uris: ["https://a.example/cb"], client_name: "quick" }));
+    expect(r.status).toBe(201);
+    const j = await r.json();
+    expect(typeof j.client_id).toBe("string");
+    expect(typeof j.client_id_issued_at).toBe("number");
+    expect(j.grant_types).toEqual(["authorization_code", "refresh_token"]);
+    expect(j.response_types).toEqual(["code"]);
+    expect(j.token_endpoint_auth_method).toBe("none");
+    expect(j.redirect_uris).toEqual(["https://a.example/cb"]);
+    // Public client: no secret is issued.
+    expect(j.client_secret).toBeUndefined();
   });
 
   it("string_redirect_uris_cannot_substring_match", async () => {
@@ -83,7 +101,7 @@ describe("ALLOWED_REDIRECT_URIS (review #1: phishing via open registration)", ()
   it("register_accepts_listed_redirects", async () => {
     const s = await startTestServer({ env });
     for (const uri of ["https://claude.ai/api/mcp/auth_callback", "http://localhost:51234/callback", "http://127.0.0.1:9/x"]) {
-      expect((await registerRaw(s, JSON.stringify({ redirect_uris: [uri] }))).status, uri).toBe(200);
+      expect((await registerRaw(s, JSON.stringify({ redirect_uris: [uri] }))).status, uri).toBe(201);
     }
   });
 

@@ -53,10 +53,21 @@ export function createOAuthRouter(deps: AppDeps, tokenStore: TokenStore) {
 
       logger.info("OAuth client registered");
 
-      return c.json({
-        client_id: clientId,
-        redirect_uris: uris,
-      });
+      // RFC 7591 §3.2.1: a successful registration is 201 Created and the
+      // response echoes the registered client metadata. This is a public
+      // client (PKCE S256, no client authentication), so token_endpoint_auth_method
+      // is "none" and no client_secret is issued.
+      return c.json(
+        {
+          client_id: clientId,
+          client_id_issued_at: Math.floor(deps.clock() / 1000),
+          grant_types: ["authorization_code", "refresh_token"],
+          response_types: ["code"],
+          token_endpoint_auth_method: "none",
+          redirect_uris: uris,
+        },
+        201,
+      );
     }
   );
 

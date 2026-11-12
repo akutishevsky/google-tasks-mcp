@@ -65,16 +65,19 @@ in your own root, along with your own `backend` block.
 The Lambda code is a **prebuilt, committed artifact**: the zip is not built by
 Terraform at apply time. The default package is **`infra-aws/src/lambda.zip`**,
 tracked in the repo. The module sets `create_package = false` and
-`local_existing_package` to that zip, and ignores later source-code-hash changes
-(code is deployed out of band with `aws lambda update-function-code`).
+`local_existing_package` to that zip, and tracks its `source_code_hash`: when
+the committed zip changes, `terraform apply` updates the function code. Rebuild
+and commit the zip (`npm run build:lambda:zip`), then apply.
 
 - **`lambda_zip_path`** (default `null`) — when left null, the module resolves
   the committed artifact at `path.module/../../src/lambda.zip` (that is,
   `infra-aws/src/lambda.zip`). Override it to point at a different zip.
 - **`lambda_version`** — when deploying the root, it defaults to the `version`
   read from the repo-root `package.json` (no manual step); override it with an
-  explicit value (e.g. a CI `git describe`). The child module, used remotely
-  without the repo root, keeps a static `1.0.0` default. Recorded
+  explicit value (e.g. a CI `git describe`). The default tracks the release:
+  it is bumped with `npm version` (see MAINTAIN.md "Releasing"). The child
+  module, used remotely without the repo root, keeps a static `1.0.0` default.
+  Recorded
   as the `lambda-version` resource tag on the Lambda and re-exposed as the
   `lambda_version` **output**, so a deployed function can be traced back to the
   build it came from.

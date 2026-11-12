@@ -207,9 +207,12 @@ rather than built at apply time: the default is `infra-aws/src/lambda.zip`
 module does not have to build. Whoever pushes rebuilds and copies the zip first;
 a `pre-push` hook (`.githooks/pre-push`, enabled with `git config core.hooksPath
 .githooks`) rebuilds the bundle and blocks the push when the committed zip is
-stale against `src/`. The `lambda_version` input (the `package.json` version) is
-written as the `lambda-version` resource tag on the Lambda and re-exposed as the
-`lambda_version` output, so a deployed function traces back to its build.
+stale against `src/`. The module tracks the zip's `source_code_hash`, so a
+`terraform apply` with a rebuilt-and-committed zip updates the function code.
+The `lambda_version` input (the `package.json` version, bumped with `npm
+version` — see MAINTAIN.md "Releasing") is written as the `lambda-version`
+resource tag on the Lambda and re-exposed as the `lambda_version` output, so a
+deployed function traces back to its build.
 
 | Module | Notes |
 |--------|-------|

@@ -89,6 +89,49 @@ deleted. A failed Google revoke is reported, and the grant is deleted anyway.
 - **`ENCRYPTION_SECRET`** (static cipher only): changing it makes stored tokens
   unreadable; everyone reconnects.
 
+## Releasing
+
+Versions are bumped with `npm version`, never by hand-editing `package.json`:
+it bumps `package.json`, creates the release commit, and creates the matching
+git tag in one step. A repo-root `.npmrc` sets `tag-version-prefix=""`, so the
+tag has no `v` prefix and matches the existing tags (`1.0.0`, `1.0.1`, …). The
+`package.json` version is the single source of truth: the AWS Terraform root
+reads it as the default `lambda_version`, recorded as the `lambda-version` tag
+on the Lambda, so a deployed function traces back to a release.
+
+Order matters when the release includes server code under `src/`, because the
+committed Lambda artifact must be in sync with `src/` before the tag is created
+(the `pre-push` hook rebuilds the bundle and blocks the push if the committed
+`infra-aws/src/lambda.zip` is stale):
+
+1. Commit the code change(s), rebuilding the artifact in the same commit when
+   `src/` changed:
+   ```bash
+   npm run build:lambda:zip
+   git add -p                      # include infra-aws/src/lambda.zip
+   git commit -m "fix: …"
+   ```
+2. Bump the version — this makes the release commit and the tag:
+   ```bash
+   npm version patch               # 1.0.2 -> 1.0.3, commits, tags 1.0.3
+   ```
+   Use `minor` / `major` for larger changes.
+3. Push the commits and the tag:
+   ```bash
+   git push origin main --follow-tags
+   ```
+   The `pre-push` hook verifies the committed zip matches `src/`; a stale zip
+   blocks the push (rebuild, re-commit, push again).
+
+A docs-only or infra-only release (no `src/` change) is just steps 2–3: the
+hook sees no `src/` in the push range and exits without rebuilding.
+
+Deploying the released code is separate and done wherever the AWS state lives:
+the Lambda module tracks the zip's `source_code_hash`, so `terraform apply`
+picks up a rebuilt-and-committed `infra-aws/src/lambda.zip` and updates the
+function. Pass `-var lambda_version=<tag>` (or rely on the `package.json`
+default) to keep the `lambda-version` tag aligned with the release.
+
 ## Connector gotchas
 
 - The issuer and redirect URI are part of every connection. Changing the

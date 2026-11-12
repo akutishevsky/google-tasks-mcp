@@ -12,7 +12,9 @@
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.test.json",
     "start": "node build/node.js",
-    "revoke": "node build/cli/revoke.js"
+    "revoke": "node build/cli/revoke.js",
+    "build:lambda": "esbuild src/lambda.ts --bundle --platform=node --target=node22 --format=esm --outfile=build/lambda/index.mjs --external:@aws-sdk/* --external:@deno/kv --external:@google-cloud/*",
+    "build:lambda:zip": "npm run build:lambda && rm -f build/lambda.zip && cd build/lambda && zip -qr ../lambda.zip ."
   },
   "keywords": [
     "mcp",
@@ -32,6 +34,7 @@
   "homepage": "https://github.com/akutishevsky/google-tasks-mcp#readme",
   "dependencies": {
     "@deno/kv": "^0.8.4",
+    "@hono/aws-lambda": "1.0.1",
     "@hono/node-server": "^1.19.18",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "hono": "^4.13.17",
@@ -40,12 +43,17 @@
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
+    "esbuild": "0.28.2",
     "fast-check": "^4.10.2",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vitest": "^5.0.5"
   },
   "optionalDependencies": {
+    "@aws-sdk/client-dynamodb": "3.1165.0",
+    "@aws-sdk/client-kms": "3.1165.0",
+    "@aws-sdk/client-secrets-manager": "3.1165.0",
+    "@aws-sdk/util-dynamodb": "3.996.9",
     "@google-cloud/firestore": "^9.3.1",
     "@google-cloud/kms": "^6.3.0"
   }

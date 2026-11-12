@@ -51,18 +51,18 @@ All through natural conversation with Claude or any other MCP-compatible client.
 
 ## Deployment Modes
 
-The same server runs in three modes. Pick one by where it runs and who uses it;
+The same server runs in four modes. Pick one by where it runs and who uses it;
 the MCP tools and the OAuth flow are identical in all of them.
 
-| | Deno Deploy | Node / container | Google Cloud (shared) |
-|---|---|---|---|
-| **Best for** | The hosted server; quick personal instance | Self-hosting anywhere that runs Node or Docker | A team on one Google Workspace domain |
-| **Runtime** | Deno Deploy (`build/index.js`) | Node 22 (`npm start`) or the `Dockerfile` | Cloud Run, scales to zero |
-| **Storage** | Deno KV (managed) | Deno KV file (`KV_PATH`) | Firestore (`STORAGE=firestore`) |
-| **Token encryption** | AES-256-GCM, `ENCRYPTION_SECRET` | AES-256-GCM, `ENCRYPTION_SECRET` | Cloud KMS (`CIPHER=gcpkms`), key rotated every 90 days |
-| **Who can sign in** | Any Google account | Any Google account, or one domain (`ALLOWED_DOMAIN`) | One Workspace domain (Internal consent screen + `ALLOWED_DOMAIN`) |
-| **Set up with** | [Step 4](#deploy-to-deno-deploy) | [Step 4](#run-on-node--in-a-container) | [DEPLOY.md](DEPLOY.md) (Terraform in `infra/`) |
-| **Operate with** | Deno Deploy dashboard | [MAINTAIN.md](MAINTAIN.md) | [MAINTAIN.md](MAINTAIN.md), incl. `npm run revoke` |
+| | Deno Deploy | Node / container | Google Cloud (shared) | AWS (serverless) |
+|---|---|---|---|---|
+| **Best for** | The hosted server; quick personal instance | Self-hosting anywhere that runs Node or Docker | A team on one Google Workspace domain | A team on AWS |
+| **Runtime** | Deno Deploy (`build/index.js`) | Node 22 (`npm start`) or the `Dockerfile` | Cloud Run, scales to zero | Lambda (Node 22) behind an API Gateway HTTP API, scales to zero |
+| **Storage** | Deno KV (managed) | Deno KV file (`KV_PATH`) | Firestore (`STORAGE=firestore`) | DynamoDB (`STORAGE=dynamodb`) |
+| **Token encryption** | AES-256-GCM, `ENCRYPTION_SECRET` | AES-256-GCM, `ENCRYPTION_SECRET` | Cloud KMS (`CIPHER=gcpkms`), key rotated every 90 days | AWS KMS (`CIPHER=awskms`), key rotation on |
+| **Who can sign in** | Any Google account | Any Google account, or one domain (`ALLOWED_DOMAIN`) | One Workspace domain (Internal consent screen + `ALLOWED_DOMAIN`) | One domain (`ALLOWED_DOMAIN`) |
+| **Set up with** | [Step 4](#deploy-to-deno-deploy) | [Step 4](#run-on-node--in-a-container) | [DEPLOY.md](DEPLOY.md) (Terraform in `infra/`) | [DEPLOY.aws.md](DEPLOY.aws.md) (Terraform in `infra-aws/`) |
+| **Operate with** | Deno Deploy dashboard | [MAINTAIN.md](MAINTAIN.md) | [MAINTAIN.md](MAINTAIN.md), incl. `npm run revoke` | [MAINTAIN.md](MAINTAIN.md), incl. `npm run revoke` |
 
 Every setting beyond the original ones is optional: with only the variables in
 the [reference](#environment-variables-reference) set, the server behaves as it
@@ -279,6 +279,48 @@ For a shared, multi-user server restricted to a Google Workspace domain, see
 [DEPLOY.md](DEPLOY.md) (Terraform in `infra/`) and [MAINTAIN.md](MAINTAIN.md)
 (configuration, token model, revoking access). All new settings are optional;
 without them the server behaves as before.
+
+#### Deploy to AWS (Lambda + API Gateway + DynamoDB + KMS)
+
+For a serverless instance on AWS, see [DEPLOY.aws.md](DEPLOY.aws.md) (runbook)
+and [MAINTAIN.md](MAINTAIN.md). The Terraform lives in `infra-aws/` as a **thin
+root plus a reusable child module**; `infra-aws/README.md` documents both uses
+in full.
+
+**Deploy the bundled root directly:**
+
+```bash
+cd infra-aws
+cp terraform.tfvars.example terraform.tfvars   # region, issuer_url, custom_domain, route53_zone_id, ...
+cp backend.hcl.example backend.hcl             # S3 state bucket + lock
+terraform init -backend-config=backend.hcl
+terraform apply -var-file=terraform.tfvars
+```
+
+**Or reference the child module from your own Terraform** (your root supplies
+its own backend and provider; the module declares neither). Pin a tag, branch or
+commit with `?ref=`:
+
+```hcl
+module "google_tasks_mcp" {
+  source = "github.com/akutishevsky/google-tasks-mcp//infra-aws/modules/google-tasks-mcp?ref=<ref>"
+
+  issuer_url           = "https://tasks.example.com"
+  custom_domain        = "tasks.example.com"
+  enable_custom_domain = true
+  route53_zone_id      = "Z0123456789ABCDEFGHIJ"  # when the zone is in your account
+  # allowed_domain, allowed_redirect_uris, public_pages, lambda_version, ... see infra-aws/modules/google-tasks-mcp/variables.tf
+}
+
+provider "aws" {
+  region = "eu-west-1"   # the module has no region input; it uses your provider
+}
+```
+
+Terraform does not build the Lambda code. Run `npm run build:lambda:zip`
+(writes `build/lambda.zip`) before every `terraform apply`; when referencing the
+child module remotely, point `lambda_zip_path` at that zip. Details in
+[`infra-aws/README.md`](infra-aws/README.md).
 
 ### Step 5: Update Google OAuth Settings
 

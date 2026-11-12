@@ -1,0 +1,18 @@
+# Copy to terraform.tfvars (git-ignored) and fill in. Never commit real values.
+region               = "<region>"                 # e.g. eu-west-1
+issuer_url           = "https://<host>"            # public base URL; pins the OAuth issuer + redirect
+allowed_domain       = "<domain>"                  # Workspace domain, or "" for any Google account
+privacy_policy_url   = "https://<your-site>/privacy" # optional; /privacy-policy redirects here
+custom_domain        = "<host>"                    # same hostname as issuer_url (without https://)
+enable_custom_domain = true                        # creates the ACM cert (regional, in `region`) + API Gateway custom domain
+
+# In-account Route 53 path: set the hosted zone ID and a single `terraform apply`
+# writes the ACM validation records, waits for ISSUED, and creates the alias
+# record for custom_domain -- no manual DNS steps. Leave empty if the zone lives
+# in another account; then create the acm_validation_records / custom_domain_target
+# records by hand.
+route53_zone_id = "<hosted-zone-id>"
+
+# lambda_zip_path is intentionally left unset: the module defaults to
+# build/lambda.zip at the repo root (run npm run build:lambda:zip first).
+# Set it only to deploy a different prebuilt zip.
